@@ -77,7 +77,7 @@ class ColumnMetadata:
         This is where we will try to automatically infer the kind and the dtype
         of the column.
         """
-        is_datetime = pd.to_datetime(col.astype(str), errors="coerce").notna().all()
+        is_datetime = pd.to_datetime(col.astype(str), errors="coerce", infer_datetime_format=True).notna().all()
         is_numeric = pd.to_numeric(col.fillna(-1), errors="coerce").notna().all()
         is_binary = col.nunique() == 2
         is_categorical = is_column_categorical(col)
