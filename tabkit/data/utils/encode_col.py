@@ -47,17 +47,6 @@ def random(
     return fill_unseen_val
 
 
-@register_encode_method
-def constant(
-    col: pd.Series,
-    tr_idxs: np.ndarray,
-    **kwargs,
-) -> Any:
-    uniq_tr_val = col[tr_idxs].unique()
-    fill_unseen_val = len(uniq_tr_val)
-    return fill_unseen_val
-
-
 def encode_col(
     method: str,
     col: pd.Series,
@@ -70,7 +59,7 @@ def encode_col(
     uniq_tr_val = col[tr_idxs].unique().tolist()
     tr_only_mapping = {v: k for k, v in enumerate(uniq_tr_val)}
 
-    if method in METHODS:
+    if method in METHODS and method != "constant":
         fill_unseen_val = METHODS[method](
             col=col,
             tr_idxs=tr_idxs,
@@ -83,7 +72,9 @@ def encode_col(
         if v not in uniq_tr_val:
             tr_only_mapping[v] = fill_unseen_val
     col = col.map(tr_only_mapping)
-    fixed_val_mapping = {uniq_tr_val}
+    fixed_val_mapping = uniq_tr_val
     if method == "constant":
-        fixed_val_mapping[fill_unseen_val] = fill_val_name
+        # if we are setting aside some value instead of using values from the
+        # training set, just allocalte another index for the unseen val.
+        fixed_val_mapping.append(fill_val_name)
     return col, fixed_val_mapping
