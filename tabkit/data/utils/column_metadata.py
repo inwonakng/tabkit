@@ -1,3 +1,4 @@
+import warnings
 from dataclasses import dataclass
 from typing import Literal
 
@@ -69,7 +70,9 @@ class ColumnMetadata:
             val = int(val)  # Ensure val is an integer for indexing
             return self.mapping[val]
         except ValueError:
-            raise ValueError(f"Value must be convertible to an integer, but got {val} with type {type(val)}.")
+            raise ValueError(
+                f"Value must be convertible to an integer, but got {val} with type {type(val)}."
+            )
 
     @classmethod
     def from_series(cls, col: pd.Series) -> "ColumnMetadata":
@@ -77,7 +80,14 @@ class ColumnMetadata:
         This is where we will try to automatically infer the kind and the dtype
         of the column.
         """
-        is_datetime = pd.to_datetime(col.astype(str), errors="coerce").notna().all()
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Could not infer format, so each element will be parsed individually, falling back to `dateutil`. To ensure parsing is consistent and as-expected, please specify a format.",
+            )
+            is_datetime = pd.to_datetime(col.astype(str), errors="coerce").notna().all()
+
         is_numeric = pd.to_numeric(col.fillna(-1), errors="coerce").notna().all()
         is_binary = col.nunique() == 2
         is_categorical = is_column_categorical(col)
