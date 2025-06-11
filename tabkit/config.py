@@ -1,12 +1,15 @@
-from pathlib import Path
 import os
+from pathlib import Path
+
 import dotenv
 import openml
 
 
-# ROOT_DIR = Path(__file__).parent.parent.parent
+# This function needs to be called before using
+def setup(project_root: Path | str):
+    dotenv.load_dotenv(Path(project_root) / ".env")
+    os.environ["TABKIT_PROJECT_ROOT"] = str(project_root)
 
-dotenv.load_dotenv(ROOT_DIR / ".env")
 
 data_dir = os.environ.get("DATA_DIR")
 if data_dir is None:

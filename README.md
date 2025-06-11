@@ -52,7 +52,11 @@ dataset_config = DatasetConfig.from_yaml("config/dataset/DATASET.yaml")
   config = TableProcessorConfig.from_yaml("config/preprocess/PREPROCESS.yaml")
 )
 
-# this is the function that does all the heavy lifting. Will cache the results in a hashed directory. So if using in distributed, we only need to process once and read from cache for subsequent runs.
+"""
+This is the function that does all the heavy lifting. It will cache the results
+in a hashed directory. So if using in distributed, we only need to process once
+and read from cache for subsequent runs.
+"""
 processor.prepare() 
 
 X,y = processor.load_split("train")
