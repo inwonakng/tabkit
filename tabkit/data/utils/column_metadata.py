@@ -65,12 +65,11 @@ class ColumnMetadata:
     def get_mapping(self, val: str | int) -> str:
         if self.mapping is None:
             raise ValueError("Mapping is not defined for this column.")
-        if isinstance(val, str):
-            return self.mapping[int(val)]
-        elif isinstance(val, int):
+        try:
+            val = int(val)  # Ensure val is an integer for indexing
             return self.mapping[val]
-        else:
-            raise TypeError(f"Value must be a string or an integer, but got {type(val)}.")
+        except ValueError:
+            raise ValueError(f"Value must be convertible to an integer, but got {val} with type {type(val)}.")
 
     @classmethod
     def from_series(cls, col: pd.Series) -> "ColumnMetadata":
