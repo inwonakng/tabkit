@@ -9,6 +9,7 @@ import pandas as pd
 from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
 
 from tabkit.utils import Configuration, setup_logger
+from tabkit.config import DATA_DIR
 
 from .utils import apply_bins  # load_automm_dataset,
 from .utils import (
