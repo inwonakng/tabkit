@@ -59,6 +59,12 @@ and read from cache for subsequent runs.
 """
 processor.prepare() 
 
-X,y = processor.load_split("train")
+X,y = processor.get_split("train")
 ...
+
+# or if you just want the raw dataframe without any preprocessing
+
+df = processor.get("df")
+
+
 ```

@@ -563,7 +563,7 @@ class TableProcessor:
             shutil.rmtree(self.save_dir)
         return self
 
-    def load_split(
+    def get_split(
         self,
         split: Literal["train", "train_noval", "val", "test", "all"] = "all",
     ) -> tuple[np.ndarray, np.ndarray]:
