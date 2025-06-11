@@ -550,6 +550,8 @@ class TableProcessor:
     ) -> np.ndarray:
         if not self.is_cached:
             raise ValueError("Data must be processed first by calling .prepare()")
+        if key == "df":
+            return pd.read_csv(self.save_dir / "raw_df.csv")
         if key not in self.loadable:
             raise ValueError(f"Invalid key: {key}")
         val = np.load(self.save_dir / f"{key}.npy")
