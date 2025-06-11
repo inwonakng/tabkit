@@ -1,7 +1,8 @@
-from typing import Any
-import re
 import json
+import re
 from pathlib import Path
+from typing import Any
+
 import numpy as np
 import torch
 
@@ -83,4 +84,4 @@ def safe_str(input_string: str) -> str:
     all non-alphanumeric and non-underscore characters with underscores.
     """
     # Replace anything not a-z, A-Z, 0-9, or underscore with '_'
-    return re.sub(r"[^a-zA-Z0-9_]", "_", input_string.replace("/","__"))
+    return re.sub(r"[^a-zA-Z0-9_]", "_", input_string.replace("/", "__"))

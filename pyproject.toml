@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tabkit"
+version = "2025.6.10"
+dependencies = [
+    "numpy>=2.0.0",
+    "pandas>=2.2.3",
+    "scikit-learn>=1.6.1",
+    "openml>=0.15.0",
+    "ucimlrepo>=0.0.7",
+    "liac-arff>=2.5.0",
+    "python-dotenv>=1.0.1",
+    "torch==2.6.0",
+]
+requires-python = ">=3.10"
+authors = [
+  {name = "Inwon Kang", email = "inwon.kang04@gmail.com"},
+]
+maintainers = [
+  {name = "Inwon Kang", email = "inwon.kang04@gmail.com"},
+]
+description = "A utility package for working with tables"
+readme = "README.md"

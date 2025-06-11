@@ -10,6 +10,8 @@ split/sampling and more in a configuration-driven manner. I made this toolkit be
 pip install git+https://github.com/inwonakng/tabkit.git@main
 ```
 
+This package has been tested only with Python 3.10 and above.
+
 ## Example Usage
 
 ```yaml
