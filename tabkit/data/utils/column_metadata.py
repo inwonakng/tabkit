@@ -70,7 +70,7 @@ class ColumnMetadata:
         elif isinstance(val, int):
             return self.mapping[val]
         else:
-            raise TypeError("Value must be a string or an integer.")
+            raise TypeError(f"Value must be a string or an integer, but got {type(val)}.")
 
     @classmethod
     def from_series(cls, col: pd.Series) -> "ColumnMetadata":
