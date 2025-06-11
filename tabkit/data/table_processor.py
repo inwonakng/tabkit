@@ -404,7 +404,7 @@ class TableProcessor:
             if y.dtype.name != "category":
                 y = y.astype("category")
             labels = y.cat.codes.values.astype(int)
-            self.label_info.mapping = [y.cat.categories.astype(str).tolist()]
+            self.label_info.mapping = y.cat.categories.astype(str).tolist()
 
             # {
             #     str(i): v for i, v in enumerate(y.cat.categories.astype(str))
