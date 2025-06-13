@@ -547,7 +547,7 @@ class TableProcessor:
     def get(
         self,
         key: str,
-    ) -> np.ndarray:
+    ) -> np.ndarray | pd.DataFrame:
         if not self.is_cached:
             raise ValueError("Data must be processed first by calling .prepare()")
         if key == "df":

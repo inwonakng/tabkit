@@ -82,10 +82,7 @@ class ColumnMetadata:
         """
 
         with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                message="Could not infer format, so each element will be parsed individually, falling back to `dateutil`. To ensure parsing is consistent and as-expected, please specify a format.",
-            )
+            warnings.simplefilter(action='ignore', category=UserWarning)
             is_datetime = pd.to_datetime(col.astype(str), errors="coerce").notna().all()
 
         is_numeric = pd.to_numeric(col.fillna(-1), errors="coerce").notna().all()
