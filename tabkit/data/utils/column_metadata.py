@@ -83,7 +83,7 @@ class ColumnMetadata:
 
         with warnings.catch_warnings():
             warnings.simplefilter(action='ignore', category=UserWarning)
-            is_datetime = pd.to_datetime(col.astype(str), errors="coerce").notna().all()
+            is_datetime = pd.to_datetime(col.astype(str), format="mixed", errors="coerce").notna().all()
 
         is_numeric = pd.to_numeric(col.fillna(-1), errors="coerce").notna().all()
         is_binary = col.nunique() == 2
