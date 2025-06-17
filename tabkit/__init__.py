@@ -1,2 +1,3 @@
-from .data import TableProcessor, TableProcessorConfig, DatasetConfig
 import tabkit.config as config
+
+from .data import ColumnMetadata, DatasetConfig, TableProcessor, TableProcessorConfig

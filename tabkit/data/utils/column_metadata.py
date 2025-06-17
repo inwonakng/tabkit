@@ -96,12 +96,14 @@ class ColumnMetadata:
             kwargs["kind"] = "datetime"
         elif is_binary:
             if is_numeric:
-                kwargs["dtype"] = "float" if col.dtype.kind == "f" else "int"
+                col_num = pd.to_numeric(col)
+                kwargs["dtype"] = "float" if col_num.dtype.kind == "f" else "int"
             else:
                 kwargs["dtype"] = "string"
             kwargs["kind"] = "binary"
         elif is_numeric:
-            kwargs["dtype"] = "float" if col.dtype.kind == "f" else "int"
+            col_num = pd.to_numeric(col)
+            kwargs["dtype"] = "float" if col_num.dtype.kind == "f" else "int"
             kwargs["kind"] = "continuous"
         elif is_categorical:
             kwargs["dtype"] = "string"
