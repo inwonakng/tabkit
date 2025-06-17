@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
 
-from tabkit.utils import Configuration, setup_logger
 from tabkit.config import DATA_DIR
+from tabkit.utils import Configuration, setup_logger
 
 from .utils import apply_bins  # load_automm_dataset,
 from .utils import (
@@ -498,7 +498,11 @@ class TableProcessor:
                         col=X[col_info.name],
                     )
             elif col_info.is_date:
-                feature_values[:, i] = pd.to_datetime(X[col_info.name]).astype(int)
+                feature_values[:, i] = pd.to_datetime(
+                    X[col_info.name],
+                    format="mixed",
+                    errors="coerce",
+                ).astype(int)
             else:
                 pass
 
