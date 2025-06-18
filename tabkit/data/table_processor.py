@@ -17,7 +17,6 @@ from .utils import (
     compute_bins,
     encode_col,
     impute_col,
-    load_from_disk,
     load_openml_dataset,
     load_uci_dataset,
     scale_col,
@@ -26,7 +25,7 @@ from .utils import (
 
 class DatasetConfig(Configuration):
     dataset_name: str
-    data_source: Literal["openml", "uci", "automm", "disk", "gdrive"]
+    data_source: Literal["openml", "uci", "automm", "disk"]
     random_state: int = 0
     openml_task_id: int | None = None
     openml_dataset_id: int | None = None
@@ -44,8 +43,6 @@ class DatasetConfig(Configuration):
             "uci",
             "automm",
             "disk",
-            "parquet",
-            "csv",
         ]:
             raise ValueError(f"Invalid data source: {self.data_source}")
         if self.data_source == "openml":
@@ -62,7 +59,7 @@ class DatasetConfig(Configuration):
         elif self.data_source == "disk":
             if self.filepath is None:
                 raise ValueError("filepath must be set for disk data source")
-            if filetype not in ["csv", "parquet"]:
+            if self.filetype not in ["csv", "parquet"]:
                 raise ValueError(
                     "filetype must be either csv or parquet for disk data source"
                 )
@@ -400,12 +397,6 @@ class TableProcessor:
             )
         elif self.dataset_config.data_source == "disk":
             X, y = load_from_file(
-                file_path=self.dataset_config.filepath,
-                file_type=self.dataset_config.filetype,
-                label_col=self.dataset_config.label_col,
-            )
-        elif self.dataset_config.data_source == "gdrive":
-            X, y = load_from_gdrive(
                 file_path=self.dataset_config.filepath,
                 file_type=self.dataset_config.filetype,
                 label_col=self.dataset_config.label_col,
