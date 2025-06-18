@@ -4,7 +4,7 @@ import pandas as pd
 
 def pick_label_col(
     df: pd.DataFrame,
-    random_state: int = 0,
+    random_state: int | None = None,
 ) -> str:
     """
     Given a dataframe, pick the column that can be used as the prediction target.

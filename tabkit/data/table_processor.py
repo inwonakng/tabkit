@@ -17,16 +17,16 @@ from .utils import (
     compute_bins,
     encode_col,
     impute_col,
+    load_from_file,
     load_openml_dataset,
     load_uci_dataset,
-    pick_label_col,
     scale_col,
 )
 
 
 class DatasetConfig(Configuration):
     dataset_name: str
-    data_source: Literal["openml", "uci", "automm", "parquet"]
+    data_source: Literal["openml", "uci", "automm", "parquet", "csv"]
     random_state: int = 0
     openml_task_id: int | None = None
     openml_dataset_id: int | None = None
@@ -34,6 +34,8 @@ class DatasetConfig(Configuration):
     uci_dataset_id: int | None = None
     parquet_path: str | None = None
     parquet_label_col: str | None = None
+    csv_path: str | None = None
+    csv_label_col: str | None = None
     automm_dataset_id: str | None = None
 
 
@@ -368,24 +370,18 @@ class TableProcessor:
                 dataset_id=self.dataset_config.automm_dataset_id,
             )
         elif self.dataset_config.data_source == "parquet":
-            df = pd.read_parquet(self.dataset_config.parquet_path)
+            X, y = load_from_file(
+                file_path=self.dataset_config.parquet_path,
+                file_type="parquet",
+                label_col=self.dataset_config.parquet_label_col,
+            )
             self.logger.info("Loaded parquet data")
-            label_col = self.dataset_config.parquet_label_col
-            # sometimes the t4 tables have constant rows.. need to remove.
-            for col in df.columns:
-                if df[col].nunique() == 1:
-                    if col == label_col:
-                        raise Exception(
-                            "{}: label {} has only one unique value and will be removed!".format(
-                                self.dataset_config.config_name, label_col
-                            )
-                        )
-                    df.pop(col)
-            if label_col is None:
-                self.logger.info(f"No label specified, picked {label_col}")
-                label_col = pick_label_col(df, self.config.random_state)
-            X = df[df.columns[df.columns != label_col]].copy()
-            y = df[label_col].copy()
+        elif self.dataset_config.data_source == "csv":
+            X, y = load_from_file(
+                file_path=self.dataset_config.csv_path,
+                file_type="csv",
+                label_col=self.dataset_config.csv_label_col,
+            )
         else:
             raise ValueError(f"Unknown data source {self.dataset_config.data_source}")
 
