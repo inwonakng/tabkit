@@ -83,6 +83,7 @@ class ColumnMetadata:
 
         with warnings.catch_warnings():
             warnings.simplefilter(action="ignore", category=UserWarning)
+            warnings.simplefilter(action="ignore", category=FutureWarning)
             is_datetime = (
                 pd.to_datetime(
                     col.astype(str),

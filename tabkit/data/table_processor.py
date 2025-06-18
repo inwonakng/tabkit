@@ -494,11 +494,14 @@ class TableProcessor:
                         col=X[col_info.name],
                     )
             elif col_info.is_date:
-                feature_values[:, i] = pd.to_datetime(
-                    X[col_info.name],
-                    format="mixed",
-                    errors="coerce",
-                ).astype(int)
+                with warnings.catch_warnings():
+                    warnings.simplefilter(action="ignore", category=UserWarning)
+                    warnings.simplefilter(action="ignore", category=FutureWarning)
+                    feature_values[:, i] = pd.to_datetime(
+                        X[col_info.name],
+                        format="mixed",
+                        errors="coerce",
+                    ).astype(int)
             else:
                 pass
 
