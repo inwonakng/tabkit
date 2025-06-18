@@ -5,7 +5,7 @@ import pandas as pd
 from .pick_label_col import pick_label_col
 
 
-def load_from_file(
+def load_fro_disk(
     file_path: str,
     file_type: Literal["csv", "parquet"] = "csv",
     label_col: str | None = None,

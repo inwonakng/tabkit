@@ -17,7 +17,7 @@ from .utils import (
     compute_bins,
     encode_col,
     impute_col,
-    load_from_file,
+    load_from_disk,
     load_openml_dataset,
     load_uci_dataset,
     scale_col,
@@ -26,17 +26,46 @@ from .utils import (
 
 class DatasetConfig(Configuration):
     dataset_name: str
-    data_source: Literal["openml", "uci", "automm", "parquet", "csv"]
+    data_source: Literal["openml", "uci", "automm", "disk", "gdrive"]
     random_state: int = 0
     openml_task_id: int | None = None
     openml_dataset_id: int | None = None
     openml_fold_idx: int = 0
     uci_dataset_id: int | None = None
-    parquet_path: str | None = None
-    parquet_label_col: str | None = None
-    csv_path: str | None = None
-    csv_label_col: str | None = None
     automm_dataset_id: str | None = None
+    grdive_link: str | None = None
+    filepath: str | None = None
+    filetype: Literal["csv", "parquet"] = "csv"
+    label_col: str | None = None
+
+    def __post_init__(self):
+        if self.data_source not in [
+            "openml",
+            "uci",
+            "automm",
+            "disk",
+            "parquet",
+            "csv",
+        ]:
+            raise ValueError(f"Invalid data source: {self.data_source}")
+        if self.data_source == "openml":
+            if self.openml_task_id is None or self.openml_dataset_id is None:
+                raise ValueError(
+                    "openml_task_id and openml_dataset_id must be set for openml data source"
+                )
+        elif self.data_source == "uci":
+            if self.uci_dataset_id is None:
+                raise ValueError("uci_dataset_id must be set for uci data source")
+        elif self.data_source == "automm":
+            if self.automm_dataset_id is None:
+                raise ValueError("automm_dataset_id must be set for automm data source")
+        elif self.data_source == "disk":
+            if self.filepath is None:
+                raise ValueError("filepath must be set for disk data source")
+            if filetype not in ["csv", "parquet"]:
+                raise ValueError(
+                    "filetype must be either csv or parquet for disk data source"
+                )
 
 
 @dataclass
@@ -369,18 +398,17 @@ class TableProcessor:
             X, y, tr_idxs, te_idxs = load_automm_dataset(
                 dataset_id=self.dataset_config.automm_dataset_id,
             )
-        elif self.dataset_config.data_source == "parquet":
+        elif self.dataset_config.data_source == "disk":
             X, y = load_from_file(
-                file_path=self.dataset_config.parquet_path,
-                file_type="parquet",
-                label_col=self.dataset_config.parquet_label_col,
+                file_path=self.dataset_config.filepath,
+                file_type=self.dataset_config.filetype,
+                label_col=self.dataset_config.label_col,
             )
-            self.logger.info("Loaded parquet data")
-        elif self.dataset_config.data_source == "csv":
-            X, y = load_from_file(
-                file_path=self.dataset_config.csv_path,
-                file_type="csv",
-                label_col=self.dataset_config.csv_label_col,
+        elif self.dataset_config.data_source == "gdrive":
+            X, y = load_from_gdrive(
+                file_path=self.dataset_config.filepath,
+                file_type=self.dataset_config.filetype,
+                label_col=self.dataset_config.label_col,
             )
         else:
             raise ValueError(f"Unknown data source {self.dataset_config.data_source}")
