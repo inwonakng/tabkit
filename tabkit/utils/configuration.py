@@ -52,6 +52,21 @@ class Configuration:
         return cls(**data)
 
     @classmethod
+    def from_file(cls, path: str | Path):
+        """
+        Load the configuration from a file.
+        The file can be YAML or JSON. The config_name is derived from the filename
+        if not present in the file content.
+        """
+        path = Path(path)
+        if path.suffix == ".yaml" or path.suffix == ".yml":
+            return cls.from_yaml(path)
+        elif path.suffix == ".json":
+            return cls.from_json(path)
+        else:
+            raise ValueError(f"Unsupported file type: {path.suffix}")
+
+    @classmethod
     def from_yaml(cls, path: str | Path):
         """Load the YAML content from `path` and instantiate the dataclass."""
         return cls._load_data_and_determine_name(path, yaml.safe_load)

@@ -1,6 +1,3 @@
-import json
-import re
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -39,49 +36,3 @@ def safe_json(
         if not isinstance(value, (int, float, str, bool)):
             raise ValueError(f"Unsupported type: {type(value)}")
         return value
-
-
-def safe_dump(value: dict, file: str | Path) -> None:
-    """Converts a dictionary to a json serializable dictionary and writes it to a file.
-
-    Args:
-        `value` (`dict`): The dictionary to be written to a file.
-        `file` (`str | Path`): Name of the file to write the dictionary to. Can be a string or a Path object.
-
-    Raises:
-        `Exception`: If there is an error writing to the file or converting the dictionary to a json serializable dictionary.
-    """
-    try:
-        with open(file, "w") as f:
-            json.dump(safe_json(value), f, indent=2)
-    except Exception as e:
-        raise Exception(f"Error dumping {file}: {str(e)}")
-
-
-def safe_load(file: str | Path) -> dict:
-    """Loads a json file and returns it as a dictionary.
-
-    Args:
-        `file` (`str | Path`): Name of the file to load. Can be a string or a Path object.
-
-    Raises:
-        `Exception`: If there is an error loading the file.
-
-    Returns:
-        `dict`
-        The contents of the file as a dictionary.
-    """
-    try:
-        with open(file) as f:
-            return json.load(f)
-    except Exception as e:
-        raise Exception(f"Error loading {file}: {str(e)}")
-
-
-def safe_str(input_string: str) -> str:
-    """
-    Converts the given string to a Unix-safe form by replacing
-    all non-alphanumeric and non-underscore characters with underscores.
-    """
-    # Replace anything not a-z, A-Z, 0-9, or underscore with '_'
-    return re.sub(r"[^a-zA-Z0-9_]", "_", input_string.replace("/", "__"))
