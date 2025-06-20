@@ -6,7 +6,7 @@ import pandas as pd
 
 
 def is_column_categorical(col: pd.Series, max_cardinalities: int = 20) -> bool:
-    if col.dtype.name in ["object", "category"] or "datetime" in col.dtype.name:
+    if col.dtype.name in ["object", "category"]:
         return True
     else:
         unique_vals = col.unique()
