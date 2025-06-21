@@ -171,6 +171,7 @@ class Configuration:
         # self.to_dict() already excludes config_name.
         # This means config_name is never written to the file.
         # On loading, config_name will be derived from the filename.
+        Path(path).parent.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
         with open(path, "w") as f:
             yaml.safe_dump(
                 self.to_dict(),
@@ -182,6 +183,7 @@ class Configuration:
 
     def save_json(self, path: str | Path):
         """Save the configuration content (excluding config_name) to a JSON file."""
+        Path(path).parent.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
         with open(path, "w") as f:
             json.dump(
                 self.to_dict(),
