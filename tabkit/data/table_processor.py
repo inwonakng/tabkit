@@ -18,6 +18,7 @@ from .utils import (
     encode_col,
     impute_col,
     load_openml_dataset,
+    load_from_disk,
     load_uci_dataset,
     scale_col,
 )
@@ -396,7 +397,7 @@ class TableProcessor:
                 dataset_id=self.dataset_config.automm_dataset_id,
             )
         elif self.dataset_config.data_source == "disk":
-            X, y = load_from_file(
+            X, y = load_from_disk(
                 file_path=self.dataset_config.filepath,
                 file_type=self.dataset_config.filetype,
                 label_col=self.dataset_config.label_col,
