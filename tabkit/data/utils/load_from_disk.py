@@ -1,3 +1,4 @@
+import json
 from typing import Literal
 
 import pandas as pd
@@ -10,7 +11,8 @@ def load_from_disk(
     file_type: Literal["csv", "parquet"] = "csv",
     label_col: str | None = None,
     random_state: int | None = None,
-):
+    split_file_path: str | None = None,
+) -> tuple[pd.DataFrame, pd.Series, list[int] | None, list[int] | None]:
     if file_type == "csv":
         df = pd.read_csv(file_path)
     elif file_type == "parquet":
@@ -31,4 +33,13 @@ def load_from_disk(
         label_col = pick_label_col(df, random_state=random_state)
     X = df[df.columns[df.columns != label_col]].copy()
     y = df[label_col].copy()
-    return X, y
+
+    if split_file_path is not None:
+        with open(split_file_path, "r") as f:
+            split_data = json.load(f)
+        tr_idxs = split_data.get("train", None)
+        te_idxs = split_data.get("test", None)
+    else:
+        tr_idxs, te_idxs = None, None
+
+    return X, y, tr_idxs, te_idxs
