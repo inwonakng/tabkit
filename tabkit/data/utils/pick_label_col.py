@@ -24,7 +24,7 @@ def pick_label_col(
     scores = pd.Series(index=df.columns, dtype=float)
     exclude_col_patterns = (
         [re.compile(exclude_col) for exclude_col in exclude_column_names]
-        if exclude_columns
+        if exclude_column_names
         else []
     )
     exclude_val_patterns = (
