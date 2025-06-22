@@ -1,6 +1,7 @@
-from typing import Literal
+import re
+
 import pandas as pd
- 
+
 from .column_metadata import ColumnMetadata
 
 
@@ -9,7 +10,8 @@ def pick_label_col(
     random_state: int | None = None,
     allowed_kind: list[str] | None = None,
     allowed_dtype: list[str] | None = None,
-    exclude_columns: list[str] | None = None,
+    exclude_column_names: list[str] | None = None,
+    excldue_column_values: list[str] | None = None,
     min_ratio: float = 0.3,
 ) -> str:
     """
@@ -20,12 +22,28 @@ def pick_label_col(
     # first, we will assign a score to each column based on the number of unique values
     # and the number of missing values.
     scores = pd.Series(index=df.columns, dtype=float)
+    exclude_col_patterns = (
+        [re.compile(exclude_col) for exclude_col in exclude_column_names]
+        if exclude_columns
+        else []
+    )
+    exclude_val_patterns = (
+        [re.compile(exclude_val) for exclude_val in excldue_column_values]
+        if excldue_column_values
+        else []
+    )
 
     for col in df.columns:
-        if exclude_columns is not None and col in exclude_columns:
-            # skip excluded columns
-            scores.pop(col)
-            continue
+        if exclude_col_patterns:
+            # also check if the exclude columns is passed as regex
+            if any(bool(pt.match(col)) for pt in exclude_col_patterns):
+                scores.pop(col)
+                continue
+        if exclude_val_patterns:
+            # check if the column has any of the excluded values
+            if df[col].str.apply(lambda x: any(pt.match(str(x)) for pt in exclude_val_patterns)).any():
+                scores.pop(col)
+                continue
 
         col_info = ColumnMetadata.from_series(df[col])
         if allowed_kind is not None and col_info.kind not in allowed_kind:
@@ -43,17 +61,20 @@ def pick_label_col(
         if n_unique == 1:
             # can't have this
             scores.pop(col)
-        elif df[col].dtype.name in ["object", "category"] or n_unique.min() >= min_ratio*df.shape[0]:
+        elif (
+            df[col].dtype.name in ["object", "category"]
+            or n_unique.min() >= min_ratio * df.shape[0]
+        ):
             # these are the best
             scores[col] = 0.9
         else:
-            if n_missing: 
+            if n_missing:
                 # we don't know how to handle continuous targets with missing data.
                 scores.pop(col)
             else:
                 scores[col] = 0.1
 
-    if not (scores==0).all():
+    if not (scores == 0).all():
         # now, randomly pick a column based on the scores
         label = scores.sample(weights=scores, random_state=random_state).index[0]
     else:
