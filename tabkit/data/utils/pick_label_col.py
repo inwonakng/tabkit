@@ -41,7 +41,13 @@ def pick_label_col(
                 continue
         if exclude_val_patterns:
             # check if the column has any of the excluded values
-            if df[col].str.apply(lambda x: any(pt.match(str(x)) for pt in exclude_val_patterns)).any():
+            if (
+                df[col]
+                .str.apply(
+                    lambda x: any(pt.match(str(x)) for pt in exclude_val_patterns)
+                )
+                .any()
+            ):
                 scores.pop(col)
                 continue
 
@@ -61,12 +67,15 @@ def pick_label_col(
         if n_unique == 1:
             # can't have this
             scores.pop(col)
-        elif (
-            df[col].dtype.name in ["object", "category"]
-            or n_unique.min() >= min_ratio * df.shape[0]
-        ):
-            # these are the best
-            scores[col] = 0.9
+        elif df[col].dtype.name in ["object", "category"]:
+            n_vals = df[col].value_counts(dropna=False)
+            if n_vals.min() < min_ratio * len(df):
+                # if the minority value is less than the min_ratio of the dataset,
+                # we will not use this column as a label.
+                scores.pop(col)
+            else:
+                # these are the best
+                scores[col] = 0.9
         else:
             if n_missing:
                 # we don't know how to handle continuous targets with missing data.
