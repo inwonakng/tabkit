@@ -122,7 +122,7 @@ class ColumnMetadata:
                 f"Cannot determine metadata for col: {col.name}. "
                 "It may contain mixed types or unsupported data."
                 f"{{is_datetime: {is_datetime}, is_numeric: {is_numeric},"
-                f"is_binary: {is_binary}, is_categorical: {is_categorical}}}"
+                f"is_binary: {is_binary}, is_categorical: {is_categorical}}}\nSample: {col.head(5)}"
             )
 
         return cls(name=col.name, **kwargs)

@@ -10,6 +10,7 @@ def pick_label_col(
     allowed_kind: list[str] | None = None,
     allowed_dtype: list[str] | None = None,
     exclude_columns: list[str] | None = None,
+    min_ratio: float = 0.3,
 ) -> str:
     """
     Given a dataframe, pick the column that can be used as the prediction target.
@@ -42,7 +43,7 @@ def pick_label_col(
         if n_unique == 1:
             # can't have this
             scores.pop(col)
-        elif df[col].dtype.name in ["object", "category"] or n_unique < 0.3*df.shape[0]:
+        elif df[col].dtype.name in ["object", "category"] or n_unique.min() >= min_ratio*df.shape[0]:
             # these are the best
             scores[col] = 0.9
         else:
