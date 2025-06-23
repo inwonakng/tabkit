@@ -19,8 +19,12 @@ def load_from_disk(
         df = pd.read_parquet(file_path)
     else:
         raise ValueError(f"Unsupported file type: {file_type}")
+
     # sometimes the t4 tables have constant rows.. need to remove.
     for col in df.columns:
+        if col.startswith("Unnamed: "):
+            df.pop(col)
+            continue
         if df[col].nunique() == 1:
             if col == label_col:
                 raise Exception(
