@@ -47,7 +47,8 @@ def pick_label_col(
         # check if the column has any of the excluded values
         if (
             df[col]
-            .str.apply(lambda x: any(pt.match(str(x)) for pt in exclude_val_patterns))
+            .astype(str)
+            .apply(lambda x: any(pt.match(str(x)) for pt in exclude_val_patterns))
             .any()
         ):
             scores.pop(col)
