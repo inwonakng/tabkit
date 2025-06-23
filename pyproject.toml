@@ -12,8 +12,8 @@ dependencies = [
     "openml>=0.15.0",
     "ucimlrepo>=0.0.7",
     "liac-arff>=2.5.0",
-    "torch==2.6.0",
 ]
+dev = ["notebook","ipykernel","jupyter"]
 requires-python = ">=3.10"
 authors = [
   {name = "Inwon Kang", email = "inwon.kang04@gmail.com"},
