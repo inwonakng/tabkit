@@ -376,6 +376,8 @@ class TableProcessor:
                 self.columns_info[i].mapping = fixed_mapping
                 feature_idxs[:, i] = X[col_info.name]
             elif col_info.is_cont:
+                # if not already, we need to make sure dtype is correct.
+                X[col_info.name] = X[col_info.name].astype(col_info.dtype)
                 X[col_info.name] = impute_col(
                     method=self.config.handle_cont_missing,
                     col=X[col_info.name],
