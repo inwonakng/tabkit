@@ -28,7 +28,7 @@ class DatasetConfig(Configuration):
         ]:
             raise ValueError(f"Invalid data source: {self.data_source}")
         if self.data_source == "openml":
-            if self.openml_task_id is None or self.openml_dataset_id is None:
+            if self.openml_task_id is None and self.openml_dataset_id is None:
                 raise ValueError(
                     "openml_task_id and openml_dataset_id must be set for openml data source"
                 )
