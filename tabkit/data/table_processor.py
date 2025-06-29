@@ -112,11 +112,11 @@ class TableProcessor:
         y: np.ndarray,
         tr_idxs: np.ndarray | None = None,
         te_idxs: np.ndarray | None = None,
-    ):
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         if y.dtype.name == "category":
             labels = y.cat.codes.values.astype(int)
         else:
-            labels = float(y)
+            labels = float(y.values)
         """
         handles splitting the data and filtering column/labels
         """
@@ -308,13 +308,11 @@ class TableProcessor:
 
         self.columns_info = [ColumnMetadata.from_series(X[col]) for col in X.columns]
         self.label_info = ColumnMetadata.from_series(y)
-        # if not self.label_info.is_bin: breakpoint()
 
         if self.label_info.is_cat or self.label_info.is_bin:
             y = y.fillna(self.config.cat_missing_fill)
             if y.dtype.name != "category":
                 y = y.astype("category")
-            labels = y.cat.codes.values.astype(int)
             self.label_info.mapping = y.cat.categories.astype(str).tolist()
         elif self.label_info.is_cont:
             if y.isna().any():
@@ -330,18 +328,15 @@ class TableProcessor:
                 old_y = y.copy()
                 y = pd.Series(apply_bins(bins=bins, col=y), dtype="category")
                 # in this case, there may be cases there are empty bins. We need to remove that case.
-                self.label_info.mapping = [
-                    str(value_mapping[int(c)]) for c in y.cat.categories.tolist()
-                ]
-                labels = y.cat.codes.values.astype(int)
-            else:
-                # if we are doing regression, we just use the values as is.
-                labels = y.values.astype(float)
-                self.label_info.mapping = None
+                self.label_info.mapping = y.cat.categories.astype(str).tolist()
         else:
             raise ValueError(
                 f"Invalid label kind and dtype: {self.label_info.kind}, {self.label_info.dtype}"
             )
+
+        labels, tr_idxs, tr_sub_idxs, val_sub_idxs, te_idxs = self.prepare_splits(
+            X, y, tr_idxs, te_idxs
+        )
 
         # for classification, the labels must be consecutive integerst starting from 0.
         if self.config.task_kind == "classification":
@@ -352,10 +347,6 @@ class TableProcessor:
                         unique_labels.tolist(), parse_which_case
                     )
                 )
-
-        labels, tr_idxs, tr_sub_idxs, val_sub_idxs, te_idxs = self.prepare_splits(
-            X, y, tr_idxs, te_idxs
-        )
 
         # we will be filling this up. This representation makes it much easier to handle with embedding-based models
         feature_idxs = np.zeros(X.shape, dtype=int)
