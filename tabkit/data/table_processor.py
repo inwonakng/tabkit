@@ -48,9 +48,11 @@ class TableProcessor:
     def __init__(
         self,
         dataset_config: DatasetConfig,
-        config: TableProcessorConfig,
+        config: TableProcessorConfig | None = None,
         verbose: bool = False,
     ):
+        if config is None:
+            config = TableProcessorConfig()
         self.config = config
         self.dataset_config = dataset_config
         self.dataset_name = dataset_config.dataset_name
