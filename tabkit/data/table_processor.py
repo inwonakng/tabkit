@@ -116,7 +116,8 @@ class TableProcessor:
         if y.dtype.name == "category":
             labels = y.cat.codes.values.astype(int)
         else:
-            labels = float(y.values)
+            labels = y.values.astype(float)
+
         """
         handles splitting the data and filtering column/labels
         """
@@ -145,6 +146,10 @@ class TableProcessor:
 
         # if we want to filter by labels, do it here
         if self.config.exclude_labels:
+            if not self.config.task_kind == "classification":
+                raise ValueError(
+                    "exclude_labels is only supported for classification tasks"
+                )
             labels_filter = ~y.isin(self.config.exclude_labels)
             y = y[labels_filter].reset_index(drop=True).copy()
             X = X[labels_filter].reset_index(drop=True).copy()
