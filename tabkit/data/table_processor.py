@@ -333,6 +333,11 @@ class TableProcessor:
                 self.label_info.mapping = [
                     str(value_mapping[int(c)]) for c in y.cat.categories.tolist()
                 ]
+                labels = y.cat.codes.values.astype(int)
+            else:
+                # if we are doing regression, we just use the values as is.
+                labels = y.values.astype(float)
+                self.label_info.mapping = None
         else:
             raise ValueError(
                 f"Invalid label kind and dtype: {self.label_info.kind}, {self.label_info.dtype}"
