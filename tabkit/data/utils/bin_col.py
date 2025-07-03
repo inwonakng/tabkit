@@ -105,7 +105,7 @@ def kmeans(
 
 def compute_bins(
     method: str,
-    col: pd.Series,
+    col: pd.Series | np.ndarray,
     n_bins: int,
     y: np.ndarray | None = None,
     is_task_regression: bool = False,
@@ -133,12 +133,12 @@ def compute_bins(
     bins = None
     if np.unique(col).shape[0] == 1:
         print(
-            f"Feature [{col.name}] has only 1 unique value. This means that every value for this feature will fall into the same bin"
+            "Current column has only 1 unique value. This means that every value for this feature will fall into the same bin"
         )
         bins = np.array([-np.inf, np.inf])
     elif np.unique(col).shape[0] == 2:
         print(
-            f"Feature [{col.name}] has only 2 unique values. Creating bins for each unique value."
+            "Current column has only 2 unique values. Creating bins for each unique value."
         )
         bins = np.linspace(col.min(), col.max(), 3)
     else:

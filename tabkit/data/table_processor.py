@@ -423,7 +423,7 @@ class TableProcessor:
         self.n_samples = int(feature_idxs.shape[0])
 
         # save raw_df
-        self.raw_df.to_csv(self.save_dir / "raw_df.csv", index=False)
+        self.raw_df.to_parquet(self.save_dir / "raw_df.parquet", index=False)
         self.logger.info("Saved raw dataframe")
 
         dumpable = {
@@ -469,7 +469,7 @@ class TableProcessor:
         if not self.is_cached:
             raise ValueError("Data must be processed first by calling .prepare()")
         if key in ["df", "dataframe"]:
-            return pd.read_csv(self.save_dir / "raw_df.csv")
+            return pd.read_parquet(self.save_dir / "raw_df.parquet")
         if key not in self.loadable:
             raise ValueError(f"Invalid key: {key}")
         val = np.load(self.save_dir / f"{key}.npy")
