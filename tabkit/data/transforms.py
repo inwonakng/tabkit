@@ -243,7 +243,7 @@ class Encode(BaseTransform):
             updated_meta = deepcopy(metadata[i])
             if col in self.encodings_:
                 mapping, fill_unseen_val = self.encodings_[col]
-                updated_meta.kind = "categorical"
+                updated_meta.kind = "binary" if len(mapping) == 2 else "categorical"
                 updated_meta.mapping = [None] * (
                     len(mapping) + (1 if self.method == "constant" else 0)
                 )
