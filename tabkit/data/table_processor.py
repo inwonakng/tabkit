@@ -311,13 +311,13 @@ class TableProcessor:
         )
 
         if self.config.sample_n_rows is not None:
-            # X, y = self._subsample_data(X, self.config.sample_n_rows, tr_idxs, te_idxs)
             train_idx = self._subsample_data(
                 tr_idxs=train_idx,
                 sample_n_rows=self.config.sample_n_rows,
                 stratify_target=y,
                 random_state=self.config.random_state,
             )
+            val_idx = train_idx
             self.logger.info("subsampled by `sample_n_rows`")
 
         X_train, y_train = X.loc[train_idx], y.loc[train_idx]
