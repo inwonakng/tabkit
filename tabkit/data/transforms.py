@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from typing import Any
+import numpy as np
 
 import pandas as pd
 
