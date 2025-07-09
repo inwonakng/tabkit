@@ -133,15 +133,18 @@ class TableProcessor:
         y: np.ndarray,
         tr_idxs: np.ndarray | None = None,
         te_idxs: np.ndarray | None = None,
+        label_info: ColumnMetadata = None,
+        sample_n_rows: int | float | None = None,
+        random_state: int = 0,
+        fold_idx: int = 0,
+        label_stratify_pipeline: list[dict[str, Any]] | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        if self.config.label_stratify_pipeline is None:
+        if label_stratify_pipeline is None:
             labels = y.copy()
         else:
-            label_pipeline = self._instantiate_pipeline(
-                self.config.label_stratify_pipeline
-            )
+            label_pipeline = self._instantiate_pipeline(label_stratify_pipeline)
             for t in label_pipeline:
-                labels, _ = t.fit_transform(y, None, [self.label_info])
+                labels, _ = t.fit_transform(y, None, [label_info])
 
         """
         handles splitting the data and filtering column/labels
@@ -154,18 +157,18 @@ class TableProcessor:
                 X=X,
                 n_splits=10,
                 stratify_target=labels,
-                random_state=self.config.random_state,
-                fold_idx=self.config.fold_idx,
+                random_state=random_state,
+                fold_idx=fold_idx,
             )
 
         # if we want to subsample, we sample here
-        if self.config.sample_n_rows is None:
+        if sample_n_rows is None:
             tr_sub_idxs, val_sub_idxs = self._try_stratified_split(
                 X=tr_idxs,
                 n_splits=9,
                 stratify_target=labels[tr_idxs],
-                random_state=self.config.random_state,
-                fold_idx=self.config.fold_idx,
+                random_state=random_state,
+                fold_idx=fold_idx,
             )
             new_tr_idxs = tr_idxs[tr_sub_idxs]
             new_val_idxs = tr_idxs[val_sub_idxs]
@@ -176,9 +179,9 @@ class TableProcessor:
             self.logger.info("subsampled by `sample_n_rows`")
             new_tr_idxs = self._subsample_data(
                 tr_idxs=tr_idxs,
-                sample_n_rows=self.config.sample_n_rows,
+                sample_n_rows=sample_n_rows,
                 stratify_target=labels,
-                random_state=self.config.random_state,
+                random_state=random_state,
             )
             tr_idxs, val_idxs = new_tr_idxs, new_tr_idxs
 
@@ -291,7 +294,17 @@ class TableProcessor:
         columns_info = [ColumnMetadata.from_series(X[col]) for col in X.columns]
         label_info = ColumnMetadata.from_series(y)
 
-        train_idx, val_idx, test_idx = self._get_splits(X, y, tr_idxs, te_idxs)
+        train_idx, val_idx, test_idx = self._get_splits(
+            X=X,
+            y=y,
+            tr_idxs=tr_idxs,
+            te_idxs=te_idxs,
+            label_info=label_info,
+            sample_n_rows=self.config.sample_n_rows,
+            random_state=self.config.random_state,
+            fold_idx=self.config.fold_idx,
+            label_stratify_pipeline=self.config.label_stratify_pipeline,
+        )
 
         if self.config.sample_n_rows is not None:
             X, y = self._subsample_data(X, y, tr_idxs, te_idxs)
