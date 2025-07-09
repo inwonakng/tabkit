@@ -7,6 +7,22 @@ import hashlib
 import copy
 
 
+import torch
+import numpy as np
+
+def jsonify(data):
+    if isinstance(data, (list, tuple)):
+        return [to_native(item) for item in data]
+    if isinstance(data, dict):
+        return {k: to_native(v) for k, v in data.items()}
+    if hasattr(data, "tolist"):
+        return data.tolist()
+    # Handles numpy scalar types like np.float32, np.int64
+    if hasattr(data, "item"):
+        return data.item()
+    return data
+
+
 @dataclass(kw_only=True)
 class Configuration:
     """
@@ -160,7 +176,7 @@ class Configuration:
         # Serialize to a canonical JSON string (sorted keys)
         # Using str(v) for all values for simplicity, but consider specific types if needed
         # e.g. float precision. For most configs, str() is fine.
-        canonical_json = json.dumps(data_to_hash, sort_keys=True, separators=(",", ":"))
+        canonical_json = json.dumps(jsonify(data_to_hash), sort_keys=True, separators=(",", ":"))
 
         hasher = HASH_METHOD()
         hasher.update(canonical_json.encode("utf-8"))
