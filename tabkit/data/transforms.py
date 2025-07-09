@@ -139,13 +139,13 @@ class Discretize(BaseTransform):
         **kwargs,
     ):
         self.bins_ = {}
-        for i, c in enumerate(X.columns):
+        for i, col in enumerate(X.columns):
             if metadata[i].kind != "continuous":
                 continue
             # Using your original compute_bins function
             bins, _ = compute_bins(
                 method=self.method,
-                col=X[c],
+                col=X[col],
                 n_bins=self.n_bins,
                 y=y,
                 is_task_regression=self.is_task_regression,
