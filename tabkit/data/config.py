@@ -6,14 +6,13 @@ from tabkit.utils import Configuration
 class DatasetConfig(Configuration):
     dataset_name: str
     data_source: Literal["openml", "uci", "automm", "disk"]
-    random_state: int = 0
     openml_task_id: int | None = None
     openml_dataset_id: int | None = None
-    openml_split_idx: int = 0
+    openml_split_idx: int | None = None
     uci_dataset_id: int | None = None
     automm_dataset_id: str | None = None
     file_path: str | None = None
-    file_type: Literal["csv", "parquet"] = "csv"
+    file_type: Literal["csv", "parquet"] | None = None
     label_col: str | None = None
     split_file_path: str | None = None
 
@@ -101,7 +100,7 @@ class TableProcessorConfig(Configuration):
             self.label_pipeline = DEFAULT_LABEL_PIPELINE
         if self.label_stratify_pipeline is None:
             self.label_stratify_pipeline = DEFAULT_LABEL_PIPELINE
-        if split_idx >= n_splits:
+        if self.split_idx >= self.n_splits:
             raise ValueError("split_idx must be less than n_splits")
-        if val_split_idx >= n_val_splits:
+        if self.val_split_idx >= self.n_val_splits:
             raise ValueError("val_split_idx must be less than n_val_splits")
