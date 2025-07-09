@@ -48,6 +48,12 @@ class DatasetConfig(Configuration):
 
 DEFAULT_PIPELINE = [
     {
+        "class": "Impute",
+        "params": {
+            "method": "most_frequent",
+        },
+    },
+    {
         "class": "Encode",
         "params": {
             "method": "most_frequent",
@@ -59,23 +65,11 @@ DEFAULT_PIPELINE = [
             "method": "to_timestamp",
         },
     },
-    {
-        "class": "Impute",
-        "params": {
-            "method": "most_frequent",
-        },
-    },
 ]
 
 DEFAULT_LABEL_PIPELINE = [
     {
         "class": "Encode",
-        "params": {
-            "method": "most_frequent",
-        },
-    },
-    {
-        "class": "Impute",
         "params": {
             "method": "most_frequent",
         },

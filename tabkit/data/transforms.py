@@ -281,11 +281,11 @@ class ConvertDatetime(BaseTransform):
         for i, c in enumerate(X.columns):
             if c not in self._datetime_columns:
                 continue
-                X_new[c] = pd.to_datetime(
-                        X_new[c],
-                        format="mixed",
-                        errors="coerce",
-                    )
+            X_new[c] = pd.to_datetime(
+                    X_new[c],
+                    format="mixed",
+                    errors="coerce",
+                )
 
             if self.method == "to_timestamp":
                 X_new[c] = X_new[c].astype(np.int64) // 10**9
