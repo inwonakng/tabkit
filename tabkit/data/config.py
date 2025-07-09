@@ -54,6 +54,12 @@ DEFAULT_PIPELINE = [
         },
     },
     {
+        "class": "ConvertDatetime",
+        "params": {
+            "method": "to_timestamp",
+        },
+    },
+    {
         "class": "Impute",
         "params": {
             "method": "most_frequent",
