@@ -1,5 +1,4 @@
-from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from tabkit.utils import Configuration
 
@@ -47,66 +46,56 @@ class DatasetConfig(Configuration):
                 )
 
 
-@dataclass
+DEFAULT_PIPELINE = [
+    {
+        "class": "Encode",
+        "params": {
+            "method": "most_frequent",
+        },
+    },
+    {
+        "class": "Impute",
+        "params": {
+            "method": "most_frequent",
+        },
+    },
+]
+
+DEFAULT_LABEL_PIPELINE = [
+    {
+        "class": "Encode",
+        "params": {
+            "method": "most_frequent",
+        },
+    },
+    {
+        "class": "Impute",
+        "params": {
+            "method": "most_frequent",
+        },
+    },
+]
+
+
 class TableProcessorConfig(Configuration):
-    """Configuation for preprocessing the dataset.
-
-    Attributes:
-        fold_idx: Which fold to use for train/val/test split.
-        n_splits: How many splits to consider for splitting (`K` for `KFold`).
-        scale_cont: Whether to scale continuous features.
-        cont_scale_method: Type of scaler to apply to contiuous features.
-        cont_scale_max_quantiles: Number of quantiles to use if using
-        `quantile` strategy.
-        bin_cont: Whether to bin continuous features.
-        cont_bin_strat: What strategy to use to bin continuous features.
-        n_bins: How many bins to use for binning continuous features.
-        handle_cat_unseen: How to handle unknown/unseen categorical values. any
-        values that are nan or not seein the train split will be replaced.
-        cat_unseen_fill: Which value to use if using `constant` strategy for
-        `handle_cat_unseen`.
-        handle_cat_missing: How to handle missing values in categorical
-        features.
-        cat_missing_fill: Which value to use if using `constant` strategy for
-        `handle_cat_missing`.
-        handle_cont_missing: How to handle missing values in continuous
-        features.
-        cont_missing_fill: Which value to use if using `constant` strategy for
-        `handle_cont_missing`.
-        cont_strat_n_bins: How many bins to use for stratifying continuous
-        features.
-        cont_strat_bin_strat: What strategy to use for stratifying continuous
-        features.
-        sample_n_rows: How much to subsample the dataset. If `None`, no
-        subsampling.
-        exclude_columns: Which columns to exclude in the dataset. If `None`, all
-        columns are included.
-        exclude_labels: Which labels to exclude in the dataset. If not `None`,
-        the rows will be sampled only from rows with the specified label
-        values.
-        random_state: Random state to use for reproducibility.
-    """
-
-    fold_idx: int = 0
-    n_splits: int = 10
-    scale_cont: bool = False
-    cont_scale_method: Literal["standard", "minmax", "quantile"] | None = "quantile"
-    cont_scale_max_quantiles: int = 1000
-    bin_cont: bool = False
-    cont_bin_strat: Literal["uniform", "quantile", "kmeans", "dtree"] = "quantile"
-    n_bins: int = 32
-    handle_cat_unseen: Literal["most_frequent", "random", "constant"] = "most_frequent"
-    cat_unseen_fill: str | None = "Unknown"
-    handle_cat_missing: Literal["most_frequent", "random", "constant"] = "most_frequent"
-    cat_missing_fill: str | None = "Missing"
-    handle_cont_missing: Literal[
-        "mean", "median", "most_frequent", "random", "constant"
-    ] = "median"
-    cont_missing_fill: float | None = None
-    cont_strat_n_bins: int = 8
-    cont_strat_bin_strat: Literal["uniform", "quantile"] = "quantile"
+    pipeline: list[dict[str, Any]] | None = None
     task_kind: Literal["classification", "regression"] = "classification"
-    sample_n_rows: int | float | None = None
+    n_splits: int = 10
+    fold_idx: int = 0
+    random_state: int = 0
+
     exclude_columns: list[str] | None = None
     exclude_labels: list[str] | None = None
-    random_state: int = 0
+    sample_n_rows: int | float | None = None
+
+    # only used to help with splitting the dataset. Will not affect the actual label column
+    label_pipeline: list[dict[str, Any]] | None = None
+    label_stratify_pipeline: list[dict[str, Any]] | None = None
+
+    def __post_init__(self):
+        if self.pipeline is None:
+            self.pipeline = DEFAULT_PIPELINE
+        if self.label_pipeline is None:
+            self.label_pipeline = DEFAULT_LABEL_PIPELINE
+        if self.label_stratify_pipeline is None:
+            self.label_stratify_pipeline = DEFAULT_LABEL_PIPELINE

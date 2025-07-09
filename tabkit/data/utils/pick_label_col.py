@@ -2,7 +2,7 @@ import re
 
 import pandas as pd
 
-from .column_metadata import ColumnMetadata
+from ..column_metadata import ColumnMetadata
 
 
 def pick_label_col(

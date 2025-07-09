@@ -1,30 +1,9 @@
-from typing import Callable
-
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
-METHODS = {}
 
-
-def register_bin_method(
-    func: Callable[
-        [
-            pd.Series,
-            int,
-            np.ndarray | None,
-            bool,
-            np.ndarray | None,
-            int | None,
-        ],
-        np.ndarray,
-    ],
-) -> None:
-    METHODS[func.__name__] = func
-
-
-@register_bin_method
 def uniform(
     col: pd.Series,
     n_bins: int,
@@ -33,7 +12,6 @@ def uniform(
     return np.linspace(col.min(), col.max(), n_bins + 1)
 
 
-@register_bin_method
 def quantile(
     col: pd.Series,
     n_bins: int,
@@ -42,7 +20,6 @@ def quantile(
     return np.unique(np.quantile(col, np.linspace(0.0, 1.0, n_bins + 1)))
 
 
-@register_bin_method
 def dtree(
     col: pd.Series,
     n_bins: int,
@@ -74,7 +51,6 @@ def dtree(
     return bins
 
 
-@register_bin_method
 def kmeans(
     col: pd.Series,
     n_bins: int,
@@ -101,6 +77,14 @@ def kmeans(
     center_means = (centers[1:] + centers[:-1]) / 2
     bins = np.r_[col.min(), center_means, col.max()]
     return bins
+
+
+METHODS = {
+    "kmeans": kmeans,
+    "quantile": quantile,
+    "uniform": uniform,
+    "dtree": dtree,
+}
 
 
 def compute_bins(
@@ -166,22 +150,3 @@ def compute_bins(
     ]
     return bins, value_mapping
 
-
-def apply_bins(
-    bins: np.ndarray,
-    col: pd.Series,
-) -> np.ndarray:
-    """Applies the bins to the column and returns the transformed column
-
-    Args:
-        bins: np.ndarray of bin edges. Has shape (n_bins + 1,)
-        col: pd.Series object of the column
-
-    Returns:
-        a numpy array that contains the bin indices for each value in the column
-    """
-    return np.clip(
-        np.digitize(col, bins) - 1,
-        0,
-        len(bins) - 2,
-    )

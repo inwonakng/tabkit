@@ -1,8 +1,9 @@
 import json
 from logging import Logger
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
@@ -10,28 +11,10 @@ from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
 from tabkit.config import DATA_DIR
 from tabkit.utils import setup_logger
 
+from .column_metadata import ColumnMetadata
 from .config import DatasetConfig, TableProcessorConfig
-from .utils import (
-    ColumnMetadata,
-    apply_bins,
-    compute_bins,
-    encode_col,
-    impute_col,
-    load_from_disk,
-    load_openml_dataset,
-    load_uci_dataset,
-    scale_col,
-)
-
-"""
-This class handles all preprocessing related (including splitting) of the
-dataset. Although labels are technically a part of the dataset, we handle them
-separately because some of the preprocessing steps require labels -- e.g.
-stratified spliting or heuristic-based binning. Once loaded, the data will be
-cached in npy files for easy access. The configuration is hashed and the cache
-is stored in a directory named after the hash. If the processor is loaded again
-with the same configuration, it will load the cached data.
-"""
+from .transforms import TRANSFORM_MAP, BaseTransform
+from .utils import load_from_disk, load_openml_dataset, load_uci_dataset
 
 
 class TableProcessor:
@@ -65,23 +48,32 @@ class TableProcessor:
         self.logger = setup_logger("TableProcessor", silent=not verbose)
         self.verbose = verbose
 
+    def _instantiate_pipeline(self, config_list) -> list[BaseTransform]:
+        pipeline = []
+        for step_config in config_list:
+            class_name = step_config["class"]
+            params = step_config.get("params", {})
+            if class_name not in TRANSFORM_MAP:
+                raise ValueError(
+                    f"Unknown transform class: '{class_name}'. "
+                    "Did you forget to register it with register_transform()?"
+                )
+            pipeline.append(TRANSFORM_MAP[class_name](**params))
+        return pipeline
+
     @property
     def is_cached(self):
         return (
             self.save_dir.exists()
-            and all(
-                (self.save_dir / f"{f}.npy").exists()
-                for f in [
-                    "train_noval_idxs",
-                    "train_idxs",
-                    "val_idxs",
-                    "test_idxs",
-                    "feature_values",
-                    "feature_idxs",
-                    "labels",
-                ]
-            )
             and (self.save_dir / "dataset_info.json").exists()
+            and (self.save_dir / "pipeline.joblib").exists()
+            and (self.save_dir / "label_pipeline.joblib").exists()
+            and (self.save_dir / "train.parquet").exists()
+            and (self.save_dir / "val.parquet").exists()
+            and (self.save_dir / "test.parquet").exists()
+            and (self.save_dir / "train_idxs.npy").exists()
+            and (self.save_dir / "val_idxs.npy").exists()
+            and (self.save_dir / "test_idxs.npy").exists()
         )
 
     @property
@@ -106,17 +98,50 @@ class TableProcessor:
     def col_shapes(self) -> list[int]:
         return [len(c.mapping) if c.is_cont else 1 for c in self.columns_info]
 
-    def prepare_splits(
+    def _try_stratified_split(
+        self,
+        X: np.ndarray,
+        n_splits: int,
+        stratify_target: np.ndarray,
+        random_state: int,
+        fold_idx: int,
+    ):
+        unique_labels, unique_labels_count = np.unique(
+            stratify_target, return_counts=True
+        )
+        if unique_labels.shape[0] < n_splits and unique_labels_count.min() >= n_splits:
+            splitter = StratifiedKFold(
+                n_splits=n_splits,
+                shuffle=True,
+                random_state=random_state,
+            )
+            tr_idxs, te_idxs = list(splitter.split(X, stratify_target))[
+                self.config.fold_idx
+            ]
+        else:
+            splitter = KFold(
+                n_splits=n_splits,
+                shuffle=True,
+                random_state=random_state,
+            )
+            tr_idxs, te_idxs = list(splitter.split(X))[fold_idx]
+        return tr_idxs, te_idxs
+
+    def _get_splits(
         self,
         X: np.ndarray,
         y: np.ndarray,
         tr_idxs: np.ndarray | None = None,
         te_idxs: np.ndarray | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        if y.dtype.name == "category":
-            labels = y.cat.codes.values.astype(int)
+        if self.config.label_stratify_pipeline is None:
+            labels = y.copy()
         else:
-            labels = y.values.astype(float)
+            label_pipeline = self._instantiate_pipeline(
+                self.config.label_stratify_pipeline
+            )
+            for t in label_pipeline:
+                labels, _ = t.fit_transform(y, None, [self.label_info])
 
         """
         handles splitting the data and filtering column/labels
@@ -125,161 +150,53 @@ class TableProcessor:
         if tr_idxs is None or te_idxs is None:
             unique_labels, unique_labels_count = np.unique(labels, return_counts=True)
             self.logger.info("No predefined split found, splitting data")
-            if (
-                self.config.task_kind == "classification"
-                and unique_labels.shape[0] < 10
-                and unique_labels_count.min() >= 10
-            ):
-                splitter = StratifiedKFold(
-                    n_splits=10,
-                    shuffle=True,
-                    random_state=self.config.random_state,
-                )
-                tr_idxs, te_idxs = list(splitter.split(X, labels))[self.config.fold_idx]
-            else:
-                splitter = KFold(
-                    n_splits=10,
-                    shuffle=True,
-                    random_state=self.config.random_state,
-                )
-                tr_idxs, te_idxs = list(splitter.split(X))[self.config.fold_idx]
-
-        # if we want to filter by labels, do it here
-        if self.config.exclude_labels:
-            if not self.config.task_kind == "classification":
-                raise ValueError(
-                    "exclude_labels is only supported for classification tasks"
-                )
-            labels_filter = ~y.isin(self.config.exclude_labels)
-            y = y[labels_filter].reset_index(drop=True).copy()
-            X = X[labels_filter].reset_index(drop=True).copy()
-            # fix labels as well
-            labels = y.cat.codes.values.astype(int)
-            # need to re-do the splitting
-            splitter = StratifiedKFold(
+            tr_idxs, te_idxs = self._try_stratified_split(
+                X=X,
                 n_splits=10,
-                shuffle=True,
+                stratify_target=labels,
                 random_state=self.config.random_state,
+                fold_idx=self.config.fold_idx,
             )
-            tr_idxs, te_idxs = list(splitter.split(X, y))[self.config.fold_idx]
-            self.logger.info("filtered by `exclude_labels`")
-
-        # if we are doing regression, we need to bin the labels first
-        stratify_labels = labels[tr_idxs]
-        if self.label_info.is_cont:
-            bins, _ = compute_bins(
-                method=self.config.cont_strat_bin_strat,
-                col=labels[tr_idxs],
-                n_bins=self.config.cont_strat_n_bins,
-                random_state=self.config.random_state,
-            )
-            stratify_labels = apply_bins(bins, labels[tr_idxs])
-
-        # if we want to filter by columns, do it here
-        if self.config.exclude_columns:
-            missing_cols = [
-                c for c in self.config.exclude_columns if c not in X.columns
-            ]
-            if len(missing_cols) > 0:
-                raise ValueError(
-                    "columns {} are not in the dataset!".format(missing_cols)
-                )
-            columns_filter = ~X.columns.isin(self.config.exclude_columns)
-            X = X[X.columns[columns_filter]].reset_index(drop=True).copy()
-            self.logger.info("filtered by `exclude_columns`")
 
         # if we want to subsample, we sample here
-        if self.config.sample_n_rows:
-            if self.config.sample_n_rows < 0:
-                raise ValueError(f"Invalid sample_n_rows: {self.config.sample_n_rows}")
-            elif self.config.sample_n_rows > 1:
-                sample_n_rows = int(self.config.sample_n_rows)
-            else:
-                sample_n_rows = float(self.config.sample_n_rows)
-
-            if sample_n_rows < len(tr_idxs):
-                _, tr_idxs_ss = train_test_split(
-                    tr_idxs,
-                    random_state=self.config.random_state,
-                    test_size=sample_n_rows,
-                    stratify=stratify_labels,
-                )
-                tr_idxs = tr_idxs_ss
-            tr_sub_idxs = np.arange(len(tr_idxs))
-            val_sub_idxs = np.arange(len(tr_idxs))
+        if self.config.sample_n_rows is None:
+            tr_sub_idxs, val_sub_idxs = self._try_stratified_split(
+                X=tr_idxs,
+                n_splits=9,
+                stratify_target=labels[tr_idxs],
+                random_state=self.config.random_state,
+                fold_idx=self.config.fold_idx,
+            )
+            new_tr_idxs = tr_idxs[tr_sub_idxs]
+            new_val_idxs = tr_idxs[val_sub_idxs]
+            tr_idxs, val_idxs = new_tr_idxs, new_val_idxs
 
         else:
-            # if we want to use validation, split the train once more. notice
-            # that we are indexing the tr_idxs by tr_sub_idxs and val_sub_idxs.
-            unique_st_labels, unique_st_labels_count = np.unique(
-                stratify_labels, return_counts=True
+            X, y = self._subsample_data(X, y, tr_idxs, te_idxs)
+            self.logger.info("subsampled by `sample_n_rows`")
+            new_tr_idxs = self._subsample_data(
+                tr_idxs=tr_idxs,
+                sample_n_rows=self.config.sample_n_rows,
+                stratify_target=labels,
+                random_state=self.config.random_state,
             )
-            if unique_st_labels.shape[0] < 9 and unique_st_labels_count.min() >= 9:
-                tr_sub_idxs, val_sub_idxs = list(
-                    StratifiedKFold(
-                        n_splits=9,
-                        shuffle=True,
-                        random_state=self.config.random_state,
-                    ).split(
-                        X=tr_idxs,
-                        y=stratify_labels,
-                    )
-                )[self.config.fold_idx]
-            else:
-                tr_sub_idxs, val_sub_idxs = list(
-                    KFold(
-                        n_splits=9,
-                        shuffle=True,
-                        random_state=self.config.random_state,
-                    ).split(
-                        X=tr_idxs,
-                    )
-                )[self.config.fold_idx]
+            tr_idxs, val_idxs = new_tr_idxs, new_tr_idxs
 
-            # save the split idxs for later use.
-            self.logger.info("Split indices using target column")
+        self.logger.info("Split indices using target column")
         return (
-            labels,
-            tr_idxs,
             tr_sub_idxs,
             val_sub_idxs,
             te_idxs,
         )
 
-    def prepare(self, overwrite: bool = False):
-        """Huge function for preprocessing the dataset. This is where multiple
-        soures (openml, raw file, etc) are handled. We first load the data,
-        compute split if not pre-defined, and apply any preprocessing (scale
-        cont. values, encode categ. values, fill missing values. etc.)
-
-        Args:
-            overwrite: if True, will ignore cache and recompute everything.
-
-        Returns:
-            None
-
-        Raises:
-            ValueError: if types are not known or n_samples is invalid.
-        """
-
-        if self.is_cached and not overwrite:
-            with open(self.save_dir / "dataset_info.json") as f:
-                dataset_info = json.load(f)
-                self.columns_info = [
-                    ColumnMetadata.from_dict(c) for c in dataset_info["columns_info"]
-                ]
-                self.loadable = dataset_info["loadable"]
-                self.n_samples = dataset_info["n_samples"]
-                self.label_info = ColumnMetadata.from_dict(dataset_info["label_info"])
-            self.logger.info(f"{self.dataset_name}: Loaded from cache")
-            return self
-
-        self.logger.info(f"{self.dataset_name}: Loading from scratch")
-        # start by loading dataset details
-        self.logger.info("Loaded dataset info")
-        self.save_dir.mkdir(parents=True, exist_ok=True)
-
-        # load data from source
+    def _load_data(
+        self,
+    ) -> tuple[
+        pd.DataFrame,
+        pd.Series,
+        np.ndarray | None,
+        np.ndarray | None,
+    ]:
         tr_idxs, te_idxs = None, None
         if self.dataset_config.data_source == "openml":
             X, y, tr_idxs, te_idxs = load_openml_dataset(
@@ -304,214 +221,201 @@ class TableProcessor:
             )
         else:
             raise ValueError(f"Unknown data source {self.dataset_config.data_source}")
+        return X, y, tr_idxs, te_idxs
 
-        # TODO: in the future, if we are pretraining, we might want more
-        # permutations of the dataset, so we should allow for dynamic target column.
+    def _filter_labels(
+        self, X: pd.DataFrame, y: pd.Series, exclude_labels: list[str]
+    ) -> tuple[pd.DataFrame, pd.Series]:
+        X = X[~y.isin(exclude_labels)].reset_index(drop=True).copy()
+        y = y[~y.isin(exclude_labels)].reset_index(drop=True).copy()
+        return X, y
 
-        self.raw_df = X.copy()
-        self.raw_df[y.name] = y.copy()
+    def _filter_columns(
+        self, X: pd.DataFrame, exclude_columns: list[str]
+    ) -> pd.DataFrame:
+        missing_cols = [c for c in self.config.exclude_columns if c not in X.columns]
+        if len(missing_cols) > 0:
+            raise ValueError("columns {} are not in the dataset!".format(missing_cols))
+        columns_filter = ~X.columns.isin(self.config.exclude_columns)
+        X = X[X.columns[columns_filter]].reset_index(drop=True).copy()
+        return X
 
-        self.columns_info = [ColumnMetadata.from_series(X[col]) for col in X.columns]
-        self.label_info = ColumnMetadata.from_series(y)
-
-        if self.label_info.is_cat or self.label_info.is_bin:
-            y = y.fillna(self.config.cat_missing_fill)
-            if y.dtype.name != "category":
-                y = y.astype("category")
-            self.label_info.mapping = y.cat.categories.astype(str).tolist()
-        elif self.label_info.is_cont:
-            if y.isna().any():
-                raise ValueError("we can't handle continuous targets with NaN!")
-            if self.config.task_kind == "classification":
-                bins, value_mapping = compute_bins(
-                    method=self.config.cont_bin_strat,
-                    col=y,
-                    n_bins=self.config.n_bins,
-                    random_state=self.config.random_state,
-                    y=y,
-                )
-                old_y = y.copy()
-                y = pd.Series(apply_bins(bins=bins, col=y), dtype="category")
-                # in this case, there may be cases there are empty bins. We need to remove that case.
-                self.label_info.mapping = y.cat.categories.astype(str).tolist()
+    def _subsample_data(
+        self,
+        tr_idxs: np.ndarray,
+        sample_n_rows: int | float,
+        stratify_target: pd.Series | None = None,
+        random_state: int = 0,
+    ) -> tuple[pd.DataFrame, pd.Series]:
+        if sample_n_rows < 0:
+            raise ValueError(f"Invalid sample_n_rows: {sample_n_rows}")
+        elif sample_n_rows > 1:
+            sample_n_rows = int(sample_n_rows)
         else:
-            raise ValueError(
-                f"Invalid label kind and dtype: {self.label_info.kind}, {self.label_info.dtype}"
+            sample_n_rows = float(sample_n_rows)
+
+        if sample_n_rows < len(tr_idxs):
+            _, tr_idxs_ss = train_test_split(
+                tr_idxs,
+                random_state=random_state,
+                test_size=sample_n_rows,
+                stratify=stratify_target[tr_idxs],
+            )
+        return tr_idxs_ss
+
+    def prepare(self, overwrite: bool = False):
+        if self.is_cached and not overwrite:
+            print("Loading from cache.")
+            self.pipeline_ = joblib.load(self.save_dir / "pipeline.joblib")
+            self.label_pipeline_ = joblib.load(self.save_dir / "label_pipeline.joblib")
+            with open(self.save_dir / "dataset_info.json") as f:
+                dataset_info = json.load(f)
+            self.columns_info = [
+                ColumnMetadata.from_dict(c) for c in dataset_info["columns_info"]
+            ]
+            self.label_info = ColumnMetadata.from_dict(dataset_info["label_info"])
+            self.n_samples = dataset_info["n_samples"]
+            return self
+
+        self.save_dir.mkdir(parents=True, exist_ok=True)
+
+        X, y, tr_idxs, te_idxs = self._load_data()
+        if self.config.exclude_labels and self.config.task_kind == "classification":
+            X, y = self._filter_labels(X, y, self.config.exclude_labels)
+            self.logger.info("filtered by `exclude_labels`")
+        if self.config.exclude_columns:
+            X = self._filter_columns(X, self.config.exclude_columns)
+            self.logger.info("filtered by `exclude_columns`")
+
+        # preliminary metadata. this will change as we apply transforms
+        columns_info = [ColumnMetadata.from_series(X[col]) for col in X.columns]
+        label_info = ColumnMetadata.from_series(y)
+
+        train_idx, val_idx, test_idx = self._get_splits(X, y, tr_idxs, te_idxs)
+
+        if self.config.sample_n_rows is not None:
+            X, y = self._subsample_data(X, y, tr_idxs, te_idxs)
+            self.logger.info("subsampled by `sample_n_rows`")
+
+        X_train, y_train = X.loc[train_idx], y.loc[train_idx]
+        X_val, y_val = X.loc[val_idx], y.loc[val_idx]
+        X_test, y_test = X.loc[test_idx], y.loc[test_idx]
+
+        self.pipeline_ = self._instantiate_pipeline(self.config.pipeline)
+        self.label_pipeline_ = self._instantiate_pipeline(self.config.label_pipeline)
+
+        self.logger.info("Fitting pipeline...")
+        for transform in self.pipeline_:
+            X_train = transform.fit_transform(
+                X=X_train,
+                y=y_train,
+                metadata=columns_info,
+                random_state=self.config.random_state,
+            )
+            X_val = transform.transform(X=X_val)
+            X_test = transform.transform(X=X_test)
+            columns_info = transform.update_metadata(
+                X_new=X_train,
+                metadata=columns_info,
             )
 
-        labels, tr_idxs, tr_sub_idxs, val_sub_idxs, te_idxs = self.prepare_splits(
-            X, y, tr_idxs, te_idxs
-        )
+        # same deal with labels
+        for transform in self.label_pipeline_:
+            y_train = transform.fit_transform(
+                X=y_train.to_frame(),
+                y=None,
+                metadata=[label_info],
+                random_state=self.config.random_state,
+            ).iloc[:, 0]
+            y_val = transform.transform(y_val.to_frame()).iloc[:, 0]
+            y_test = transform.transform(y_test.to_frame()).iloc[:, 0]
+            label_info = transform.update_metadata(
+                X_new=y_train.to_frame(),
+                metadata=[label_info],
+            )[0]
 
-        # for classification, the labels must be consecutive integerst starting from 0.
-        if self.config.task_kind == "classification":
-            unique_labels = np.unique(labels)
-            if (np.arange(len(unique_labels)) != unique_labels).any():
-                raise ValueError(
-                    "task is classification but labels are not consecutive: {} case: {}".format(
-                        unique_labels.tolist(), parse_which_case
-                    )
-                )
+        self.columns_info = columns_info
+        self.label_info = label_info
+        self.n_samples = len(X)
 
-        # we will be filling this up. This representation makes it much easier to handle with embedding-based models
-        feature_idxs = np.zeros(X.shape, dtype=int)
-        feature_values = np.ones(X.shape, dtype=float)
+        self.logger.info("Saving processed data and pipeline to cache...")
+        X_train[y.name] = y_train
+        X_train.to_parquet(self.save_dir / "train.parquet")
+        X_val[y.name] = y_val
+        X_val.to_parquet(self.save_dir / "val.parquet")
+        X_test[y.name] = y_test
+        X_test.to_parquet(self.save_dir / "test.parquet")
 
-        # iterate over the columns and apply appropriate transformations
-        for i, col_info in enumerate(self.columns_info):
-            if col_info.is_cat or col_info.is_bin:
-                X[col_info.name] = impute_col(
-                    method=self.config.handle_cat_missing,
-                    col=X[col_info.name],
-                    tr_idxs=tr_sub_idxs,
-                    fill_val=self.config.cat_missing_fill,
-                    random_state=self.config.random_state,
-                )
-                # Clean up categorical features. Remove values we don't see outside of training
-                fixed_col, fixed_mapping = encode_col(
-                    method=self.config.handle_cat_unseen,
-                    col=X[col_info.name],
-                    tr_idxs=tr_sub_idxs,
-                    fill_val_name=self.config.cat_unseen_fill,
-                    random_state=self.config.random_state,
-                )
-                X[col_info.name] = fixed_col
-                self.columns_info[i].mapping = fixed_mapping
-                feature_idxs[:, i] = X[col_info.name]
-            elif col_info.is_cont:
-                # if not already, we need to make sure dtype is correct.
-                X[col_info.name] = X[col_info.name].astype(col_info.dtype)
-                X[col_info.name] = impute_col(
-                    method=self.config.handle_cont_missing,
-                    col=X[col_info.name],
-                    tr_idxs=tr_sub_idxs,
-                    fill_val=self.config.cont_missing_fill,
-                    random_state=self.config.random_state,
-                )
-                if self.config.scale_cont:
-                    X[col_info.name] = scale_col(
-                        method=self.config.cont_scale_method,
-                        col=X[col_info.name],
-                        tr_idxs=tr_sub_idxs,
-                        max_quantiles=self.config.cont_scale_max_quantiles,
-                    )
-                feature_values[:, i] = X[col_info.name]
+        # also save the indices
+        np.save(self.save_dir / "train_idxs.npy", train_idx)
+        np.save(self.save_dir / "val_idxs.npy", val_idx)
+        np.save(self.save_dir / "test_idxs.npy", test_idx)
 
-                if self.config.bin_cont:
-                    bins, value_mapping = compute_bins(
-                        method=self.config.cont_bin_strat,
-                        col=X[col_info.name],
-                        n_bins=self.config.n_bins,
-                        random_state=self.config.random_state,
-                        y=y,
-                    )
-                    self.columns_info[i].mapping = value_mapping
+        joblib.dump(self.pipeline_, self.save_dir / "pipeline.joblib")
+        joblib.dump(self.label_pipeline_, self.save_dir / "label_pipeline.joblib")
+        with open(self.save_dir / "config.json", "w") as f:
+            json.dump(self.config.to_dict(), f, indent=2)
 
-                    feature_idxs[:, i] = apply_bins(
-                        bins=bins,
-                        col=X[col_info.name],
-                    )
-            elif col_info.is_date:
-                feature_values[:, i] = pd.to_datetime(
-                    X[col_info.name],
-                    format="mixed",
-                    errors="coerce",
-                ).astype(int)
-            else:
-                pass
+        # save the raw df and the indices as well.
+        df = X.copy()
+        df[y.name] = y
 
-        self.n_samples = int(feature_idxs.shape[0])
-
-        # save raw_df
-        self.raw_df.to_parquet(self.save_dir / "raw_df.parquet", index=False)
-        self.logger.info("Saved raw dataframe")
-
-        dumpable = {
-            "train_noval_idxs": (tr_idxs, "int"),
-            "train_idxs": (tr_idxs[tr_sub_idxs], "int"),
-            "val_idxs": (tr_idxs[val_sub_idxs], "int"),
-            "test_idxs": (te_idxs, "int"),
-            "feature_values": (feature_values, "float"),
-            "feature_idxs": (feature_idxs, "int"),
-            "labels": (
-                labels,
-                "float" if self.label_info.is_cont else "int",
-            ),
-        }
-        self.loadable = list(dumpable.keys())
-        for k, (obj, dtype) in dumpable.items():
-            if dtype == "int":
-                np.save(self.save_dir / f"{k}.npy", obj.astype(int))
-            elif dtype == "float":
-                np.save(self.save_dir / f"{k}.npy", obj.astype(float))
-            elif dtype == "bool":
-                np.save(self.save_dir / f"{k}.npy", obj.astype(bool))
-            else:
-                raise ValueError(f"Invalid dtype: {dtype}")
-        self.logger.info("Dumped cache")
+        df.to_parquet(self.save_dir / "raw_df.parquet", index=False)
 
         dataset_info = {
             "columns_info": [c.to_dict() for c in self.columns_info],
-            "loadable": self.loadable,
             "label_info": self.label_info.to_dict(),
             "n_samples": self.n_samples,
         }
         with open(self.save_dir / "dataset_info.json", "w") as f:
             json.dump(dataset_info, f)
-        self.logger.info("Saved dataset info")
 
-        return self
+        self.logger.info("Done.")
 
-    def get(
-        self,
-        key: str,
-    ) -> np.ndarray | pd.DataFrame:
-        if not self.is_cached:
-            raise ValueError("Data must be processed first by calling .prepare()")
-        if key in ["df", "dataframe"]:
-            return pd.read_parquet(self.save_dir / "raw_df.parquet")
-        if key not in self.loadable:
-            raise ValueError(f"Invalid key: {key}")
-        val = np.load(self.save_dir / f"{key}.npy")
-        return val
-
-    def reset(self):
-        if self.save_dir.exists():
-            self.logger.info("Resetting cache...")
-            shutil.rmtree(self.save_dir)
         return self
 
     def get_split(
-        self,
-        split: Literal["train", "train_noval", "val", "test", "all"] = "all",
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Loads the train/val/test split in numpy arrays.
-
-        Args:
-            split: Name of the split to load. `train_noval` refers
-            to the training split including the validation split.
-
-        Returns:
-            a tuple of `np.ndarray`s for the features and target if `kind` is `numpy`,
-
-        Raises:
-            ValueError if `split` is not one of `[None, "train", "train_noval", "val", "test"]`.
-        """
+        self, split: Literal["all", "train", "val", "test"] = "all"
+    ) -> tuple[pd.DataFrame, pd.Series]:
         if not self.is_cached:
-            raise ValueError("Data must be processed first by calling .prepare()")
-        if split and split not in ["train", "train_noval", "val", "test", "all"]:
-            raise ValueError(f"Invalid split: {split}")
-        if split == "all":
-            split_idxs = np.arange(self.n_samples)
+            raise RuntimeError(
+                "Processor has not been prepared. Call .prepare() first."
+            )
+        if split in ["train", "val", "test"]:
+            df = pd.read_parquet(self.save_dir / f"{split}.parquet")
         else:
-            split_idxs = self.get(f"{split}_idxs")
-        feature_val = self.get("feature_values")
-        feature_idx = self.get("feature_idxs")
-        X = feature_idx
-        if not self.config.bin_cont:
-            X = X.astype(float)
-            cont_cols = [c.is_cont for c in self.columns_info]
-            X[:, cont_cols] = feature_val[:, cont_cols]
-        X = X[split_idxs]
-        y = self.get("labels")[split_idxs]
+            df_tr = pd.read_parquet(self.save_dir / "train.parquet")
+            df_val = pd.read_parquet(self.save_dir / "val.parquet")
+            df_te = pd.read_parquet(self.save_dir / "test.parquet")
+            df = pd.concat([df_tr, df_val, df_te], ignore_index=True).reset_index(
+                drop=True
+            )
+        y = df[self.label_info.name].copy()
+        X = df.drop(columns=[self.label_info.name]).copy()
         return X, y
+
+    def get(self, key: str) -> Any:
+        if not self.is_cached:
+            raise RuntimeError(
+                "Processor has not been prepared. Call .prepare() first."
+            )
+        # first check if the file exists
+        candidates = sorted(self.save_dir.glob(f"{key}.*"))
+        if len(candidates) == 0:
+            raise ValueError(f"Key {key} not found in cache.")
+        if len(candidates) > 1:
+            raise ValueError(f"Multiple files found for key {key}: {candidates}")
+        file_path = candidates[0]
+        if file_path.suffix == ".npy":
+            return np.load(file_path)
+        elif file_path.suffix == ".parquet":
+            return pd.read_parquet(file_path)
+        elif file_path.suffix == ".joblib":
+            return joblib.load(file_path)
+        elif file_path.suffix == ".json":
+            with open(file_path) as f:
+                return json.load(f)
+        else:
+            raise ValueError(
+                f"Unsupported file format for key {key}: {file_path.suffix}"
+            )
