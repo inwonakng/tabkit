@@ -1,20 +1,23 @@
-from typing import Any  # Make sure Literal is imported if used by subclasses
-from pathlib import Path
-from dataclasses import dataclass, field, asdict, fields  # Import fields for replace
-import yaml
-import json  # For from_json
-import hashlib
 import copy
+import hashlib
+import json  # For from_json
+from dataclasses import (
+    asdict,
+    dataclass,
+    field,  # Import fields for replace
+    fields,
+)
+from pathlib import Path
+from typing import Any  # Make sure Literal is imported if used by subclasses
 
+import yaml
 
-import torch
-import numpy as np
 
 def jsonify(data):
     if isinstance(data, (list, tuple)):
-        return [to_native(item) for item in data]
+        return [jsonify(item) for item in data]
     if isinstance(data, dict):
-        return {k: to_native(v) for k, v in data.items()}
+        return {k: jsonify(v) for k, v in data.items()}
     if hasattr(data, "tolist"):
         return data.tolist()
     # Handles numpy scalar types like np.float32, np.int64
@@ -176,7 +179,9 @@ class Configuration:
         # Serialize to a canonical JSON string (sorted keys)
         # Using str(v) for all values for simplicity, but consider specific types if needed
         # e.g. float precision. For most configs, str() is fine.
-        canonical_json = json.dumps(jsonify(data_to_hash), sort_keys=True, separators=(",", ":"))
+        canonical_json = json.dumps(
+            jsonify(data_to_hash), sort_keys=True, separators=(",", ":")
+        )
 
         hasher = HASH_METHOD()
         hasher.update(canonical_json.encode("utf-8"))
