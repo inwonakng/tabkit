@@ -5,16 +5,12 @@ from typing import Literal
 import pandas as pd
 
 
-def is_column_categorical(col: pd.Series, max_cardinalities: int = 20) -> bool:
+def is_column_categorical(col: pd.Series, max_cardinalities: int = 10) -> bool:
     if col.dtype.name in ["object", "category"]:
         return True
     else:
         unique_vals = col.unique()
-        if (
-            unique_vals.shape[0] < max_cardinalities
-            # all values are numerical, then its a numerical column!
-            and not col.astype(str).str.isnumeric().all()
-        ):
+        if unique_vals.shape[0] < max_cardinalities:
             return True
     return False
 

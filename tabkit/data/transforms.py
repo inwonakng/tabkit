@@ -303,6 +303,7 @@ class ConvertDatetime(BaseTransform):
                 ]
                 X_new = X_new.drop(columns=[c])
                 self._removed_column_idxs.append(c)
+        return X_new
 
     def update_metadata(
         self,
