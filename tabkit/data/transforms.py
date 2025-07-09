@@ -269,14 +269,17 @@ class ConvertDatetime(BaseTransform):
     ):
         return self
 
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+    def transform(
+        self, X: pd.DataFrame, metadata: list[ColumnMetadata]
+    ) -> pd.DataFrame:
         X_new = X.copy()
-        self._original_columns = []
-        self._removed_columns = []
-        self._added_columns = []
-        for c in X.columns:
-            if not np.issubdtype(X_new[c].dtype, np.datetime64):
+        self._original_columns = X.columns.tolist()
+        self._removed_column_idxs = []
+        self._date_columns = []
+        for i, c in enumerate(X.columns):
+            if not metadata[i].kind == "datetime":
                 continue
+            self._date_column_idxs.append(i)
             if self.method == "to_timestamp":
                 X_new[c] = X_new[c].astype(np.int64) // 10**9
             elif self.method == "ignore":
@@ -298,7 +301,7 @@ class ConvertDatetime(BaseTransform):
                     c + "_second",
                 ]
                 X_new = X_new.drop(columns=[c])
-                self._removed_columns.append(c)
+                self._removed_column_idxs.append(c)
 
     def update_metadata(
         self,
@@ -308,23 +311,31 @@ class ConvertDatetime(BaseTransform):
         new_metadata = []
         to_add = []
         for i, met in enumerate(metadata):
-            updated_meta = deepcopy(metadata[i])
-            if col not in X_new.columns:
+            if i in self._removed_column_idxs:
                 continue
-            if np.issubdtype(X_new[col].dtype, np.datetime64):
+            updated_meta = deepcopy(met)
+            if i in self._date_column_idxs:
                 if self.method == "to_timestamp":
                     updated_meta.kind = "continuous"
-                    updated_meta.dtype = "int64"
-                elif self.method == "ignore":
+                    updated_meta.dtype = "int"
+                elif self.method in ["ignore", "decompose"]:
                     continue
-                elif self.method == "decompose":
-                    for f in ["_year", "_month", "_day", "_hour", "_minute", "_second"]:
-                        new_meta = deepcopy(updated_meta)
-                        new_meta.name = col + f
-                        new_meta.dtype = "int"
-                        new_meta.kind = "continuous"
-                        to_add.append(new_meta)
             new_metadata.append(updated_meta)
+
+        if self.method == "decompose":
+            for f in [
+                "_year",
+                "_month",
+                "_day",
+                "_hour",
+                "_minute",
+                "_second",
+            ]:
+                new_meta = deepcopy(updated_meta)
+                new_meta.name = col + f
+                new_meta.dtype = "int"
+                new_meta.kind = "continuous"
+                to_add.append(new_meta)
         new_metadata += to_add
         return new_metadata
 

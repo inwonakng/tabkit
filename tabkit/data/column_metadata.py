@@ -22,7 +22,12 @@ def is_column_categorical(col: pd.Series, max_cardinalities: int = 20) -> bool:
 @dataclass
 class ColumnMetadata:
     name: str
-    kind: Literal["datetime", "categorical", "binary", "continuous"]
+    kind: Literal[
+        "datetime",
+        "categorical",
+        "binary",
+        "continuous",
+    ]
     dtype: Literal["float", "int", "string", "datetime"]
     mapping: list[str] | None = None
 
