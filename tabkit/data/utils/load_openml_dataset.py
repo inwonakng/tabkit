@@ -6,7 +6,7 @@ import pandas as pd
 def load_openml_dataset(
     task_id: int | None = None,
     dataset_id: int | None = None,
-    fold_idx: int = 0,
+    split_idx: int = 0,
     random_state: int = 0,
 ) -> tuple[pd.DataFrame, pd.Series, np.ndarray, np.ndarray]:
     """Load and preprocess an OpenML dataset.
@@ -17,7 +17,7 @@ def load_openml_dataset(
     Args:
         task_id: The ID of the OpenML task. If provided, it overrides the dataset_id.
         dataset_id: The ID of the OpenML dataset to load.
-        fold_idx: The index of the test split to use. Used for reproducible train/test splits.
+        split_idx: The index of the test split to use. Used for reproducible train/test splits.
         random_state: The random seed to use for reproducible train/test splits.
 
     Raises:
@@ -60,7 +60,7 @@ def load_openml_dataset(
     # re-use the split if we have a task_id.
     # if not, let the processor handle it and just return None
     if task_id is not None:
-        tr_idxs, te_idxs = task.get_train_test_split_indices(fold=fold_idx)
+        tr_idxs, te_idxs = task.get_train_test_split_indices(fold=split_idx)
     else:
         tr_idxs, te_idxs = None, None
     is_col_cat = np.array(is_col_cat)

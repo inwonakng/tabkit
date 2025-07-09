@@ -42,8 +42,8 @@ class TableProcessor:
         self.save_dir = (
             DATA_DIR
             / "data"
-            / self.dataset_config.config_name
-            / self.config.config_name
+            / self.dataset_config.get_unique_name()
+            / self.config.get_unique_name()
         )
         self.logger = setup_logger("TableProcessor", silent=not verbose)
         self.verbose = verbose
@@ -104,7 +104,7 @@ class TableProcessor:
         n_splits: int,
         stratify_target: np.ndarray,
         random_state: int,
-        fold_idx: int,
+        split_idx: int,
     ):
         unique_labels, unique_labels_count = np.unique(
             stratify_target, return_counts=True
@@ -116,7 +116,7 @@ class TableProcessor:
                 random_state=random_state,
             )
             tr_idxs, te_idxs = list(splitter.split(X, stratify_target))[
-                self.config.fold_idx
+                self.config.split_idx
             ]
         else:
             splitter = KFold(
@@ -124,7 +124,7 @@ class TableProcessor:
                 shuffle=True,
                 random_state=random_state,
             )
-            tr_idxs, te_idxs = list(splitter.split(X))[fold_idx]
+            tr_idxs, te_idxs = list(splitter.split(X))[split_idx]
         return tr_idxs, te_idxs
 
     def _prepare_split_target(
@@ -150,7 +150,10 @@ class TableProcessor:
         te_idxs: np.ndarray | None = None,
         label_info: ColumnMetadata = None,
         random_state: int = 0,
-        fold_idx: int = 0,
+        n_splits: int = 10,
+        split_idx: int = 0,
+        n_val_splits: int = 9,
+        val_split_idx: int = 0,
         label_stratify_pipeline: list[dict[str, Any]] | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -162,18 +165,18 @@ class TableProcessor:
             self.logger.info("No predefined split found, splitting data")
             tr_idxs, te_idxs = self._try_stratified_split(
                 X=X,
-                n_splits=10,
+                n_splits=n_splits,
                 stratify_target=labels,
                 random_state=random_state,
-                fold_idx=fold_idx,
+                split_idx=split_idx,
             )
 
         tr_sub_idxs, val_sub_idxs = self._try_stratified_split(
             X=tr_idxs,
-            n_splits=9,
+            n_splits=n_val_splits,
             stratify_target=labels[tr_idxs],
             random_state=random_state,
-            fold_idx=fold_idx,
+            split_idx=val_split_idx,
         )
 
         self.logger.info("Split indices using target column")
@@ -196,7 +199,7 @@ class TableProcessor:
             X, y, tr_idxs, te_idxs = load_openml_dataset(
                 task_id=(self.dataset_config.openml_task_id),
                 dataset_id=(self.dataset_config.openml_dataset_id),
-                fold_idx=self.dataset_config.openml_fold_idx,
+                split_idx=self.dataset_config.openml_split_idx,
                 random_state=self.config.random_state,
             )
             self.logger.info("Loaded openml data")
@@ -300,7 +303,11 @@ class TableProcessor:
             te_idxs=te_idxs,
             label_info=label_info,
             random_state=self.config.random_state,
-            fold_idx=self.config.fold_idx,
+            n_splits=self.config.n_splits,
+            split_idx=self.config.split_idx,
+            n_val_splits=self.config.n_val_splits,
+            val_split_idx=self.config.val_split_idx,
+            label_stratify_pipeline=self.config.label_stratify_pipeline,
         )
 
         if self.config.sample_n_rows is not None:

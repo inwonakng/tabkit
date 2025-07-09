@@ -9,10 +9,9 @@ class DatasetConfig(Configuration):
     random_state: int = 0
     openml_task_id: int | None = None
     openml_dataset_id: int | None = None
-    openml_fold_idx: int = 0
+    openml_split_idx: int = 0
     uci_dataset_id: int | None = None
     automm_dataset_id: str | None = None
-    grdive_link: str | None = None
     file_path: str | None = None
     file_type: Literal["csv", "parquet"] = "csv"
     label_col: str | None = None
@@ -81,15 +80,18 @@ class TableProcessorConfig(Configuration):
     pipeline: list[dict[str, Any]] | None = None
     task_kind: Literal["classification", "regression"] = "classification"
     n_splits: int = 10
-    fold_idx: int = 0
+    split_idx: int = 0
+    n_val_splits: int = 9
+    val_split_idx: int = 0
     random_state: int = 0
+    split_ratio: tuple[float, float, float] = (0.8, 0.1, 0.1)
 
     exclude_columns: list[str] | None = None
     exclude_labels: list[str] | None = None
     sample_n_rows: int | float | None = None
 
-    # only used to help with splitting the dataset. Will not affect the actual label column
     label_pipeline: list[dict[str, Any]] | None = None
+    # only used to help with splitting the dataset. Will not affect the actual label column
     label_stratify_pipeline: list[dict[str, Any]] | None = None
 
     def __post_init__(self):
@@ -99,3 +101,7 @@ class TableProcessorConfig(Configuration):
             self.label_pipeline = DEFAULT_LABEL_PIPELINE
         if self.label_stratify_pipeline is None:
             self.label_stratify_pipeline = DEFAULT_LABEL_PIPELINE
+        if split_idx >= n_splits:
+            raise ValueError("split_idx must be less than n_splits")
+        if val_split_idx >= n_val_splits:
+            raise ValueError("val_split_idx must be less than n_val_splits")
