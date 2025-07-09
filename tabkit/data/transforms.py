@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from typing import Any
-import numpy as np
 
+import numpy as np
 import pandas as pd
 
 from .column_metadata import ColumnMetadata
@@ -28,7 +28,7 @@ class BaseTransform(ABC):
         raise NotImplementedError
 
     def update_metadata(
-        self, metadata: list[ColumnMetadata], **kwargs
+        self, X_new: pd.DataFrame, metadata: list[ColumnMetadata], **kwargs
     ) -> list[ColumnMetadata]:
         return metadata
 
@@ -255,11 +255,86 @@ class Encode(BaseTransform):
         return new_metadata
 
 
+@dataclass
+class ConvertDatetime(BaseTransform):
+    method: str
+
+    def fit(
+        self,
+        X: pd.DataFrame,
+        *,
+        metadata: list[ColumnMetadata],
+        y: pd.Series = None,
+        **kwargs,
+    ):
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        X_new = X.copy()
+        self._original_columns = []
+        self._removed_columns = []
+        self._added_columns = []
+        for c in X.columns:
+            if not np.issubdtype(X_new[c].dtype, np.datetime64):
+                continue
+            if self.method == "to_timestamp":
+                X_new[c] = X_new[c].astype(np.int64) // 10**9
+            elif self.method == "ignore":
+                X_new = X_new.drop(columns=[c])
+                self._removed_columns.append(c)
+            elif self.method == "decompose":
+                X_new[c + "_year"] = X_new[c].dt.year
+                X_new[c + "_month"] = X_new[c].dt.month
+                X_new[c + "_day"] = X_new[c].dt.day
+                X_new[c + "_hour"] = X_new[c].dt.hour
+                X_new[c + "_minute"] = X_new[c].dt.minute
+                X_new[c + "_second"] = X_new[c].dt.second
+                self._added_columns + [
+                    c + "_year",
+                    c + "_month",
+                    c + "_day",
+                    c + "_hour",
+                    c + "_minute",
+                    c + "_second",
+                ]
+                X_new = X_new.drop(columns=[c])
+                self._removed_columns.append(c)
+
+    def update_metadata(
+        self,
+        X_new: pd.DataFrame,
+        metadata: list[ColumnMetadata],
+    ) -> list[ColumnMetadata]:
+        new_metadata = []
+        to_add = []
+        for i, met in enumerate(metadata):
+            updated_meta = deepcopy(metadata[i])
+            if col not in X_new.columns:
+                continue
+            if np.issubdtype(X_new[col].dtype, np.datetime64):
+                if self.method == "to_timestamp":
+                    updated_meta.kind = "continuous"
+                    updated_meta.dtype = "int64"
+                elif self.method == "ignore":
+                    continue
+                elif self.method == "decompose":
+                    for f in ["_year", "_month", "_day", "_hour", "_minute", "_second"]:
+                        new_meta = deepcopy(updated_meta)
+                        new_meta.name = col + f
+                        new_meta.dtype = "int"
+                        new_meta.kind = "continuous"
+                        to_add.append(new_meta)
+            new_metadata.append(updated_meta)
+        new_metadata += to_add
+        return new_metadata
+
+
 TRANSFORM_MAP = {
     "Impute": Impute,
     "Scale": Scale,
     "Discretize": Discretize,
     "Encode": Encode,
+    "ConvertDatetime": ConvertDatetime,
 }
 
 
