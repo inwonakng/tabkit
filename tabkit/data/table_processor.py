@@ -308,7 +308,7 @@ class TableProcessor:
         )
 
         if self.config.sample_n_rows is not None:
-            X, y = self._subsample_data(X, y, tr_idxs, te_idxs)
+            X, y = self._subsample_data(X, self.config.sample_n_rows, tr_idxs, te_idxs)
             self.logger.info("subsampled by `sample_n_rows`")
 
         X_train, y_train = X.loc[train_idx], y.loc[train_idx]
