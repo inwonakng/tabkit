@@ -133,8 +133,8 @@ class Discretize(BaseTransform):
         self,
         X: pd.DataFrame,
         *,
-        y: pd.Series = None,
         metadata: list[ColumnMetadata],
+        y: pd.Series = None,
         random_state: int | None = None,
         **kwargs,
     ):
@@ -198,8 +198,8 @@ class Encode(BaseTransform):
         self,
         X: pd.DataFrame,
         *,
-        y: pd.Series = None,
         metadata: list[ColumnMetadata],
+        y: pd.Series = None,
         random_state: int | None = None,
         **kwargs,
     ):

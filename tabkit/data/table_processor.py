@@ -139,12 +139,13 @@ class TableProcessor:
         fold_idx: int = 0,
         label_stratify_pipeline: list[dict[str, Any]] | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        if label_stratify_pipeline is None:
-            labels = y.copy()
-        else:
+        labels = y.copy()
+        if label_stratify_pipeline is not None:
             label_pipeline = self._instantiate_pipeline(label_stratify_pipeline)
             for t in label_pipeline:
-                labels, _ = t.fit_transform(y, None, [label_info])
+                labels = t.fit_transform(
+                    X=labels.to_frame(), metadata=[label_info]
+                ).iloc[:, 0]
 
         """
         handles splitting the data and filtering column/labels
