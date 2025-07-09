@@ -267,19 +267,20 @@ class ConvertDatetime(BaseTransform):
         y: pd.Series = None,
         **kwargs,
     ):
+        self._datetime_columns = []
+        for met in metadata:
+            if met.kind == "datetime":
+                self._datetime_columns.append(met.name)
+
         return self
 
-    def transform(
-        self, X: pd.DataFrame, metadata: list[ColumnMetadata]
-    ) -> pd.DataFrame:
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X_new = X.copy()
         self._original_columns = X.columns.tolist()
         self._removed_column_idxs = []
-        self._date_columns = []
         for i, c in enumerate(X.columns):
-            if not metadata[i].kind == "datetime":
+            if c not in self._datetime_columns:
                 continue
-            self._date_column_idxs.append(i)
             if self.method == "to_timestamp":
                 X_new[c] = X_new[c].astype(np.int64) // 10**9
             elif self.method == "ignore":
@@ -311,10 +312,8 @@ class ConvertDatetime(BaseTransform):
         new_metadata = []
         to_add = []
         for i, met in enumerate(metadata):
-            if i in self._removed_column_idxs:
-                continue
             updated_meta = deepcopy(met)
-            if i in self._date_column_idxs:
+            if met.name in self._datetime_columns:
                 if self.method == "to_timestamp":
                     updated_meta.kind = "continuous"
                     updated_meta.dtype = "int"
@@ -331,7 +330,7 @@ class ConvertDatetime(BaseTransform):
                 "_minute",
                 "_second",
             ]:
-                new_meta = deepcopy(updated_meta)
+                new_meta = deepcopy(metadata[0])
                 new_meta.name = col + f
                 new_meta.dtype = "int"
                 new_meta.kind = "continuous"
