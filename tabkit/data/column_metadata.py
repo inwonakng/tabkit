@@ -5,7 +5,7 @@ from typing import Literal
 import pandas as pd
 
 
-def is_column_categorical(col: pd.Series, max_cardinalities: int = 10) -> bool:
+def is_column_categorical(col: pd.Series, max_cardinalities: int = 20) -> bool:
     if col.dtype.name in ["object", "category"]:
         return True
     else:
@@ -111,13 +111,13 @@ class ColumnMetadata:
             else:
                 kwargs["dtype"] = "string"
             kwargs["kind"] = "binary"
+        elif is_categorical:
+            kwargs["dtype"] = "string"
+            kwargs["kind"] = "categorical"
         elif is_numeric:
             col_num = pd.to_numeric(col)
             kwargs["dtype"] = "float" if col_num.dtype.kind == "f" else "int"
             kwargs["kind"] = "continuous"
-        elif is_categorical:
-            kwargs["dtype"] = "string"
-            kwargs["kind"] = "categorical"
         else:
             raise ValueError(
                 f"Cannot determine metadata for col: {col.name}. "

@@ -248,14 +248,16 @@ class TableProcessor:
         else:
             sample_n_rows = float(sample_n_rows)
 
+        sampled = tr_idxs
         if sample_n_rows < len(tr_idxs):
-            _, tr_idxs_ss = train_test_split(
+            _, sampled = train_test_split(
                 tr_idxs,
                 random_state=random_state,
                 test_size=sample_n_rows,
                 stratify=stratify_target[tr_idxs],
             )
-        return tr_idxs_ss
+
+        return sampled
 
     def prepare(self, overwrite: bool = False):
         if self.is_cached and not overwrite:
