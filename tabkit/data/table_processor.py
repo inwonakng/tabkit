@@ -307,7 +307,7 @@ class TableProcessor:
                 tr_idxs=train_idx,
                 sample_n_rows=self.config.sample_n_rows,
                 stratify_target=y,
-                random_state=random_state,
+                random_state=self.config.random_state,
             )
             self.logger.info("subsampled by `sample_n_rows`")
 

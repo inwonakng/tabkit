@@ -208,7 +208,7 @@ class Encode(BaseTransform):
         for i, col in enumerate(X.columns):
             if metadata[i].kind not in ["categorical", "binary"]:
                 continue
-            uniq_tr_val = X[col].unique().tolist()
+            uniq_tr_val = sorted(X[col].unique().tolist())
             tr_only_mapping = {v: k for k, v in enumerate(uniq_tr_val)}
             if self.method == "constant":
                 fill_unseen_val = len(uniq_tr_val)
