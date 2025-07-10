@@ -265,8 +265,8 @@ class TableProcessor:
     def prepare(self, overwrite: bool = False):
         if self.is_cached and not overwrite:
             print("Loading from cache.")
-            self.pipeline_ = joblib.load(self.save_dir / "pipeline.joblib")
-            self.label_pipeline_ = joblib.load(self.save_dir / "label_pipeline.joblib")
+            self.pipeline = joblib.load(self.save_dir / "pipeline.joblib")
+            self.label_pipeline = joblib.load(self.save_dir / "label_pipeline.joblib")
             with open(self.save_dir / "dataset_info.json") as f:
                 dataset_info = json.load(f)
             self.columns_info = [
@@ -296,39 +296,43 @@ class TableProcessor:
             label_stratify_pipeline=self.config.label_stratify_pipeline,
         )
 
-        train_idx, val_idx, test_idx = self._get_splits(
-            X=X,
-            labels=startify_target,
-            tr_idxs=tr_idxs,
-            te_idxs=te_idxs,
-            label_info=label_info,
-            random_state=self.config.random_state,
-            n_splits=self.config.n_splits,
-            split_idx=self.config.split_idx,
-            n_val_splits=self.config.n_val_splits,
-            val_split_idx=self.config.val_split_idx,
-            label_stratify_pipeline=self.config.label_stratify_pipeline,
-        )
-
         if self.config.sample_n_rows is not None:
-            train_idx = self._subsample_data(
-                tr_idxs=train_idx,
+            tr_idxs = self._subsample_data(
+                tr_idxs=tr_idxs,
                 sample_n_rows=self.config.sample_n_rows,
                 stratify_target=y,
                 random_state=self.config.random_state,
             )
-            val_idx = train_idx
             self.logger.info("subsampled by `sample_n_rows`")
+
+        if self.config.split_validation:
+            train_idx, val_idx, test_idx = self._get_splits(
+                X=X,
+                labels=startify_target,
+                tr_idxs=tr_idxs,
+                te_idxs=te_idxs,
+                label_info=label_info,
+                random_state=self.config.random_state,
+                n_splits=self.config.n_splits,
+                split_idx=self.config.split_idx,
+                n_val_splits=self.config.n_val_splits,
+                val_split_idx=self.config.val_split_idx,
+                label_stratify_pipeline=self.config.label_stratify_pipeline,
+            )
+        else:
+            train_idx = tr_idxs
+            val_idx = tr_idxs
+            test_idx = te_idxs
 
         X_train, y_train = X.loc[train_idx], y.loc[train_idx]
         X_val, y_val = X.loc[val_idx], y.loc[val_idx]
         X_test, y_test = X.loc[test_idx], y.loc[test_idx]
 
-        self.pipeline_ = self._instantiate_pipeline(self.config.pipeline)
-        self.label_pipeline_ = self._instantiate_pipeline(self.config.label_pipeline)
+        self.pipeline = self._instantiate_pipeline(self.config.pipeline)
+        self.label_pipeline = self._instantiate_pipeline(self.config.label_pipeline)
 
         self.logger.info("Fitting pipeline...")
-        for transform in self.pipeline_:
+        for transform in self.pipeline:
             X_train = transform.fit_transform(
                 X=X_train,
                 y=y_train,
@@ -343,7 +347,7 @@ class TableProcessor:
             )
 
         # same deal with labels
-        for transform in self.label_pipeline_:
+        for transform in self.label_pipeline:
             y_train = transform.fit_transform(
                 X=y_train.to_frame(),
                 y=None,
@@ -374,8 +378,8 @@ class TableProcessor:
         np.save(self.save_dir / "val_idxs.npy", val_idx)
         np.save(self.save_dir / "test_idxs.npy", test_idx)
 
-        joblib.dump(self.pipeline_, self.save_dir / "pipeline.joblib")
-        joblib.dump(self.label_pipeline_, self.save_dir / "label_pipeline.joblib")
+        joblib.dump(self.pipeline, self.save_dir / "pipeline.joblib")
+        joblib.dump(self.label_pipeline, self.save_dir / "label_pipeline.joblib")
         with open(self.save_dir / "config.json", "w") as f:
             json.dump(self.config.to_dict(), f, indent=2)
 

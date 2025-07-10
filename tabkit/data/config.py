@@ -88,6 +88,7 @@ class TableProcessorConfig(Configuration):
     exclude_columns: list[str] | None = None
     exclude_labels: list[str] | None = None
     sample_n_rows: int | float | None = None
+    split_validation: bool = True
 
     label_pipeline: list[dict[str, Any]] | None = None
     # only used to help with splitting the dataset. Will not affect the actual label column
