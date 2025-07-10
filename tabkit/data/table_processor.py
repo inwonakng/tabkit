@@ -153,6 +153,7 @@ class TableProcessor:
         n_splits: int = 10,
         split_idx: int = 0,
         n_val_splits: int = 9,
+        split_validation: bool = True,
         sample_n_rows: int | float | None = None,
         val_split_idx: int = 0,
         label_stratify_pipeline: list[dict[str, Any]] | None = None,
@@ -320,9 +321,9 @@ class TableProcessor:
             n_splits=self.config.n_splits,
             split_idx=self.config.split_idx,
             n_val_splits=self.config.n_val_splits,
+            split_validation=self.config.split_validation,
             val_split_idx=self.config.val_split_idx,
             label_stratify_pipeline=self.config.label_stratify_pipeline,
-            split_validation=self.config.split_validation,
         )
 
         X_train, y_train = X.loc[train_idx], y.loc[train_idx]
