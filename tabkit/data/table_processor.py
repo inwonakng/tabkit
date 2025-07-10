@@ -153,6 +153,7 @@ class TableProcessor:
         n_splits: int = 10,
         split_idx: int = 0,
         n_val_splits: int = 9,
+        sample_n_rows: int | float | None = None,
         val_split_idx: int = 0,
         label_stratify_pipeline: list[dict[str, Any]] | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -171,13 +172,26 @@ class TableProcessor:
                 split_idx=split_idx,
             )
 
-        tr_sub_idxs, val_sub_idxs = self._try_stratified_split(
-            X=tr_idxs,
-            n_splits=n_val_splits,
-            stratify_target=labels[tr_idxs],
-            random_state=random_state,
-            split_idx=val_split_idx,
-        )
+        if sample_n_rows is not None:
+            tr_idxs = self._subsample_data(
+                tr_idxs=tr_idxs,
+                sample_n_rows=self.config.sample_n_rows,
+                stratify_target=y,
+                random_state=self.config.random_state,
+            )
+            self.logger.info("subsampled by `sample_n_rows`")
+
+        if split_validation:
+            tr_sub_idxs, val_sub_idxs = self._try_stratified_split(
+                X=tr_idxs,
+                n_splits=n_val_splits,
+                stratify_target=labels[tr_idxs],
+                random_state=random_state,
+                split_idx=val_split_idx,
+            )
+        else:
+            tr_sub_idxs = np.arange(len(tr_idxs))
+            val_sub_idxs = np.arange(len(tr_idxs))
 
         self.logger.info("Split indices using target column")
         return (
@@ -296,33 +310,20 @@ class TableProcessor:
             label_stratify_pipeline=self.config.label_stratify_pipeline,
         )
 
-        if self.config.sample_n_rows is not None:
-            tr_idxs = self._subsample_data(
-                tr_idxs=tr_idxs,
-                sample_n_rows=self.config.sample_n_rows,
-                stratify_target=y,
-                random_state=self.config.random_state,
-            )
-            self.logger.info("subsampled by `sample_n_rows`")
-
-        if self.config.split_validation:
-            train_idx, val_idx, test_idx = self._get_splits(
-                X=X,
-                labels=startify_target,
-                tr_idxs=tr_idxs,
-                te_idxs=te_idxs,
-                label_info=label_info,
-                random_state=self.config.random_state,
-                n_splits=self.config.n_splits,
-                split_idx=self.config.split_idx,
-                n_val_splits=self.config.n_val_splits,
-                val_split_idx=self.config.val_split_idx,
-                label_stratify_pipeline=self.config.label_stratify_pipeline,
-            )
-        else:
-            train_idx = tr_idxs
-            val_idx = tr_idxs
-            test_idx = te_idxs
+        train_idx, val_idx, test_idx = self._get_splits(
+            X=X,
+            labels=startify_target,
+            tr_idxs=tr_idxs,
+            te_idxs=te_idxs,
+            label_info=label_info,
+            random_state=self.config.random_state,
+            n_splits=self.config.n_splits,
+            split_idx=self.config.split_idx,
+            n_val_splits=self.config.n_val_splits,
+            val_split_idx=self.config.val_split_idx,
+            label_stratify_pipeline=self.config.label_stratify_pipeline,
+            split_validation=self.config.split_validation,
+        )
 
         X_train, y_train = X.loc[train_idx], y.loc[train_idx]
         X_val, y_val = X.loc[val_idx], y.loc[val_idx]

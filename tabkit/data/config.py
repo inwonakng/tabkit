@@ -83,12 +83,11 @@ class TableProcessorConfig(Configuration):
     n_val_splits: int = 9
     val_split_idx: int = 0
     random_state: int = 0
-    split_ratio: tuple[float, float, float] = (0.8, 0.1, 0.1)
+    split_validation: bool = True
 
     exclude_columns: list[str] | None = None
     exclude_labels: list[str] | None = None
     sample_n_rows: int | float | None = None
-    split_validation: bool = True
 
     label_pipeline: list[dict[str, Any]] | None = None
     # only used to help with splitting the dataset. Will not affect the actual label column
