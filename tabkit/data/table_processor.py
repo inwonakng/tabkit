@@ -279,7 +279,7 @@ class TableProcessor:
 
     def prepare(self, overwrite: bool = False):
         if self.is_cached and not overwrite:
-            print("Loading from cache.")
+            self.logger.info("Loading from cache.")
             self.pipeline = joblib.load(self.save_dir / "pipeline.joblib")
             self.label_pipeline = joblib.load(self.save_dir / "label_pipeline.joblib")
             with open(self.save_dir / "dataset_info.json") as f:
@@ -291,6 +291,7 @@ class TableProcessor:
             self.n_samples = dataset_info["n_samples"]
             return self
 
+        self.logger.info("Preparing data processor for dataset: %s", self.dataset_name)
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
         X, y, tr_idxs, te_idxs = self._load_data()
