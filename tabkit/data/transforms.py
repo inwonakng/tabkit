@@ -355,6 +355,7 @@ TRANSFORM_MAP = {
 }
 
 
+# for adding custom transforms
 def add_transform(cls: type[BaseTransform]) -> type[BaseTransform]:
-    METHODS[cls.__name__] = cls
+    TRANSFORM_MAP[cls.__name__] = cls
     return cls

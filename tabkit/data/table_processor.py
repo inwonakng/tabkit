@@ -181,18 +181,17 @@ class TableProcessor:
                 random_state=self.config.random_state,
             )
             self.logger.info("subsampled by `sample_n_rows`")
-
-        if split_validation:
-            tr_sub_idxs, val_sub_idxs = self._try_stratified_split(
-                X=tr_idxs,
-                n_splits=n_val_splits,
-                stratify_target=labels[tr_idxs],
-                random_state=random_state,
-                split_idx=val_split_idx,
-            )
-        else:
-            tr_sub_idxs = np.arange(len(tr_idxs))
-            val_sub_idxs = np.arange(len(tr_idxs))
+            if split_validation:
+                tr_sub_idxs, val_sub_idxs = self._try_stratified_split(
+                    X=tr_idxs,
+                    n_splits=n_val_splits,
+                    stratify_target=labels[tr_idxs],
+                    random_state=random_state,
+                    split_idx=val_split_idx,
+                )
+            else:
+                tr_sub_idxs = np.arange(len(tr_idxs))
+                val_sub_idxs = np.arange(len(tr_idxs))
 
         self.logger.info("Split indices using target column")
         return (
