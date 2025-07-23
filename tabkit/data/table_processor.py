@@ -449,3 +449,7 @@ class TableProcessor:
             raise ValueError(
                 f"Unsupported file format for key {key}: {file_path.suffix}"
             )
+
+    def get_dataframe() -> pd.DataFrame:
+        """Get the raw dataframe with all columns and the target column."""
+        return self.get("raw_df")
