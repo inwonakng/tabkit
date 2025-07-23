@@ -87,7 +87,8 @@ class ColumnMetadata:
             warnings.simplefilter(action="ignore", category=FutureWarning)
             is_datetime = (
                 pd.to_datetime(
-                    col.astype(str),
+                    # we will let the imputer handle NaNs.
+                    col[~col.isna()].astype(str),
                     format="mixed",
                     errors="coerce",
                 )
