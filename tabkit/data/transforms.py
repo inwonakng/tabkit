@@ -173,10 +173,6 @@ class Discretize(BaseTransform):
         metadata: list[ColumnMetadata],
     ) -> list[ColumnMetadata]:
         """Change the 'kind' and 'mapping' for binned columns."""
-        if not hasattr(self, "value_mappings_"):
-            raise RuntimeError(
-                "Transform must be fitted before metadata can be updated."
-            )
         new_metadata = []
         for i, col in enumerate(X_new.columns):
             updated_meta = deepcopy(metadata[i])

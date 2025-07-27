@@ -306,6 +306,13 @@ class TableProcessor:
         columns_info = [ColumnMetadata.from_series(X[col]) for col in X.columns]
         label_info = ColumnMetadata.from_series(y)
 
+        if not (self.label_info.is_bin or self.label_info.is_cat) and self.config.task_kind == "classification":
+            self.logger.warning(
+                f"Label column {label_info.name} is not categorical or binary, but task_kind is 'classification'. "
+                "This may lead to issues during stratified splitting."
+            )
+            y = 
+
         startify_target = self._prepare_split_target(
             y=y,
             label_info=label_info,
