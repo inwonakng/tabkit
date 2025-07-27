@@ -158,9 +158,7 @@ class TableProcessor:
         val_split_idx: int = 0,
         label_stratify_pipeline: list[dict[str, Any]] | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """
-        handles splitting the data and filtering column/labels
-        """
+        """Handles splitting the data and filtering column/labels."""
         # if no predefined splits, do it here.
         if tr_idxs is None or te_idxs is None:
             unique_labels, unique_labels_count = np.unique(labels, return_counts=True)
@@ -306,13 +304,6 @@ class TableProcessor:
         columns_info = [ColumnMetadata.from_series(X[col]) for col in X.columns]
         label_info = ColumnMetadata.from_series(y)
 
-        if not (self.label_info.is_bin or self.label_info.is_cat) and self.config.task_kind == "classification":
-            self.logger.warning(
-                f"Label column {label_info.name} is not categorical or binary, but task_kind is 'classification'. "
-                "This may lead to issues during stratified splitting."
-            )
-            y = 
-
         startify_target = self._prepare_split_target(
             y=y,
             label_info=label_info,
@@ -358,6 +349,16 @@ class TableProcessor:
 
         # same deal with labels
         for transform in self.label_pipeline:
+            if (
+                not (self.label_info.is_bin or self.label_info.is_cat)
+                and self.config.task_kind == "classification"
+                and "Discretize" not in [l["class"] for l in self.config.label_pipeline]
+            ):
+                self.logger.warning(
+                    f"Label column {label_info.name} is not categorical or binary, for task_kind 'classification'. "
+                    "Consider adding a Discretize step to the label_pipeline."
+                )
+
             y_train = transform.fit_transform(
                 X=y_train.to_frame(),
                 y=None,
