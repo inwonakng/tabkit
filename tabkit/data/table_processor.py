@@ -349,16 +349,6 @@ class TableProcessor:
 
         # same deal with labels
         for transform in self.label_pipeline:
-            if (
-                not (self.label_info.is_bin or self.label_info.is_cat)
-                and self.config.task_kind == "classification"
-                and "Discretize" not in [l["class"] for l in self.config.label_pipeline]
-            ):
-                self.logger.warning(
-                    f"Label column {label_info.name} is not categorical or binary, for task_kind 'classification'. "
-                    "Consider adding a Discretize step to the label_pipeline."
-                )
-
             y_train = transform.fit_transform(
                 X=y_train.to_frame(),
                 y=None,
