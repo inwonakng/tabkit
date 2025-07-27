@@ -182,7 +182,7 @@ class Discretize(BaseTransform):
                 updated_meta.mapping = [
                     f"[{bins[j]:.4f}, {bins[j + 1]:.4f})" for j in range(len(bins) - 1)
                 ]
-                new_metadata.append(updated_meta)
+            new_metadata.append(updated_meta)
         return new_metadata
 
 
