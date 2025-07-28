@@ -72,6 +72,8 @@ def pick_label_col(
             scores.pop(col)
         elif col_info.is_cat or col_info.is_bin:
             n_vals = df[col].value_counts(dropna=False)
+            if n_missing:
+                scores.pop(col)
             if n_vals.min() < min_ratio * len(df):
                 # if the minority value is less than the min_ratio of the dataset,
                 # we will not use this column as a label.
