@@ -102,7 +102,7 @@ class ColumnMetadata:
 
         kwargs = {"mapping": None}
         # datetime only counts if it's not all just numbers
-        if is_datetime and not is_numeric:
+        if is_datetime:
             kwargs["dtype"] = "datetime"
             kwargs["kind"] = "datetime"
         elif is_binary:
