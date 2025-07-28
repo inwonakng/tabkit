@@ -57,11 +57,13 @@ def pick_label_col(
         col_info = ColumnMetadata.from_series(df[col])
         if col_info.kind in exclude_kind:
             # skip columns that are not of the allowed kind
-            scores.pop(col)
+            if col in scores:
+                scores.pop(col)
             continue
         if col_info.dtype in exclude_dtype:
             # skip columns that are not of the allowed dtype
-            scores.pop(col)
+            if col in scores:
+                scores.pop(col)
             continue
 
         n_unique = df[col].nunique()
@@ -69,24 +71,29 @@ def pick_label_col(
         # now we will assign a score based on the data type
         if n_unique == 1:
             # can't have this
-            scores.pop(col)
+            if col in scores:
+                scores.pop(col)
         elif col_info.is_cat or col_info.is_bin:
             n_vals = df[col].value_counts(dropna=False)
-            if n_missing:
+            if n_missing and col in scores:
                 scores.pop(col)
             if n_vals.min() < min_ratio * len(df):
                 # if the minority value is less than the min_ratio of the dataset,
                 # we will not use this column as a label.
-                scores.pop(col)
+                if col in scores:
+                    scores.pop(col)
             else:
                 # these are the best
-                scores[col] = 0.9
+                if col in scores:
+                    scores[col] = 0.9
         else:
             if n_missing:
                 # we don't know how to handle continuous targets with missing data.
-                scores.pop(col)
+                if col in scores:
+                    scores.pop(col)
             else:
-                scores[col] = 0.1
+                if col in scores:
+                    scores[col] = 0.1
 
     if not (scores == 0).all():
         # now, randomly pick a column based on the scores
