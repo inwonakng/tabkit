@@ -4,9 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tabkit"
-version = "2025.7.09"
+version = "2025.8.22"
 dependencies = [
-    "numpy>=2.0.0",
+    "numpy>=1.26.3",
     "pandas>=2.2.3",
     "scikit-learn>=1.6.1",
     "openml>=0.15.0",
