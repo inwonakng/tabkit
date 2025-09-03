@@ -1,2 +1,6 @@
 __pycache__
 tabkit/data/utils/__pycache__
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+dist
