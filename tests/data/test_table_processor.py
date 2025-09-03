@@ -138,8 +138,6 @@ def test_classification_with_float_label_discretizes(processor, mocker):
 
     # Configure for classification but provide no explicit label pipeline
     processor.config.task_kind = 'classification'
-    processor.config.label_pipeline = []
-
     processor.prepare()
 
     _, y_processed = processor.get_split('train')

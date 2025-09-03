@@ -65,12 +65,21 @@ DEFAULT_PIPELINE = [
     },
 ]
 
-DEFAULT_LABEL_PIPELINE = [
+DEFAULT_LABEL_PIPELINE_REG = [
     {
         "class": "Encode",
-        "params": {
-            "method": "most_frequent",
-        },
+        "params": {"method": "most_frequent"},
+    },
+]
+
+DEFAULT_LABEL_PIPELINE_CLF = [
+    {
+        "class": "Encode",
+        "params": {"method": "most_frequent"},
+    },
+    {
+        "class": "Discretize",
+        "params": {"method": "quantile", "n_bins": 4},
     },
 ]
 
@@ -97,9 +106,12 @@ class TableProcessorConfig(Configuration):
         if self.pipeline is None:
             self.pipeline = DEFAULT_PIPELINE
         if self.label_pipeline is None:
-            self.label_pipeline = DEFAULT_LABEL_PIPELINE
+            if self.task_kind == "classification":
+                self.label_pipeline = DEFAULT_LABEL_PIPELINE_CLF
+            else:
+                self.label_pipeline = DEFAULT_LABEL_PIPELINE_REG
         if self.label_stratify_pipeline is None:
-            self.label_stratify_pipeline = DEFAULT_LABEL_PIPELINE
+            self.label_stratify_pipeline = DEFAULT_LABEL_PIPELINE_REG
         if self.split_idx >= self.n_splits:
             raise ValueError("split_idx must be less than n_splits")
         if self.val_split_idx >= self.n_val_splits:

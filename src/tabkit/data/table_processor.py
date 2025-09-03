@@ -11,7 +11,7 @@ from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
 from tabkit.config import DATA_DIR
 from tabkit.utils import setup_logger
 
-from .column_metadata import ColumnMetadata
+from .column_metadata import ColumnMetadata, is_column_categorical
 from .config import DatasetConfig, TableProcessorConfig
 from .transforms import TRANSFORM_MAP, BaseTransform
 from .utils import load_from_disk, load_openml_dataset, load_uci_dataset
@@ -305,7 +305,7 @@ class TableProcessor:
         # if the task is classification and the label is continuous, discretize it.
         if (
             self.config.task_kind == "classification"
-            and pd.api.types.is_float_dtype(y.dtype)
+            and not is_column_categorical(y)
             and not self.config.label_pipeline
         ):
             self.logger.info(
