@@ -1,12 +1,11 @@
-
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pytest
-from pathlib import Path
 
-from tabkit.data.table_processor import TableProcessor
 from tabkit.data.config import DatasetConfig, TableProcessorConfig
+from tabkit.data.table_processor import TableProcessor
 from tabkit.data.transforms import BaseTransform
+
 
 # A simple transform for testing mock calls
 class MockTransform(BaseTransform):
@@ -25,19 +24,24 @@ class MockTransform(BaseTransform):
         self.fit_transform_called = True
         return self.transform(X)
 
+
 @pytest.fixture
 def sample_data():
-    X = pd.DataFrame({
-        'numeric': np.random.randn(100),
-        'categorical': ['A', 'B'] * 50
-    })
-    y = pd.Series([0, 1] * 50, name='target')
+    X = pd.DataFrame({"numeric": np.random.randn(100), "categorical": ["A", "B"] * 50})
+    y = pd.Series([0, 1] * 50, name="target")
     return X, y
+
 
 @pytest.fixture
 def dataset_config():
     # Using a dummy config that doesn't rely on real data sources
-    return DatasetConfig(dataset_name='test_dataset', data_source='disk', file_path='dummy.csv', file_type='csv')
+    return DatasetConfig(
+        dataset_name="test_dataset",
+        data_source="disk",
+        file_path="dummy.csv",
+        file_type="csv",
+    )
+
 
 @pytest.fixture
 def table_processor_config():
@@ -49,6 +53,7 @@ def table_processor_config():
         n_val_splits=4,
     )
 
+
 @pytest.fixture
 def processor(dataset_config, table_processor_config, tmp_path):
     proc = TableProcessor(dataset_config, table_processor_config)
@@ -56,28 +61,34 @@ def processor(dataset_config, table_processor_config, tmp_path):
     proc.save_dir = tmp_path / "processed_data"
     return proc
 
+
 def test_prepare_pipeline_execution(processor, sample_data, mocker):
     """Test that fit_transform is called on train and transform on val/test."""
     X, y = sample_data
-    mocker.patch.object(processor, '_load_data', return_value=(X, y, None, None))
+    mocker.patch.object(processor, "_load_data", return_value=(X, y, None, None))
 
     # Replace real transform with a mock to spy on it
     mock_transform_instance = MockTransform()
-    mocker.patch(
-            'tabkit.data.table_processor.TRANSFORM_MAP',
-            {'Impute': lambda **kwargs: mock_transform_instance, 'Encode': MockTransform}
-        )
 
+    def mock_instantiate_pipeline(config_list):
+        if config_list == processor.config.pipeline:
+            return [mock_transform_instance]
+        return []
+
+    mocker.patch.object(
+        processor, "_instantiate_pipeline", side_effect=mock_instantiate_pipeline
+    )
     processor.prepare()
 
     # fit_transform should be called once (on train), transform twice (val, test)
     assert mock_transform_instance.fit_transform_called
     assert mock_transform_instance.transform_called
 
+
 def test_splitting(processor, sample_data, mocker):
     X, y = sample_data
     assert len(X) == 100
-    mocker.patch.object(processor, '_load_data', return_value=(X, y, None, None))
+    mocker.patch.object(processor, "_load_data", return_value=(X, y, None, None))
 
     processor.prepare()
 
@@ -94,12 +105,13 @@ def test_splitting(processor, sample_data, mocker):
     assert len(np.intersect1d(val_idxs, test_idxs)) == 0
     assert len(np.intersect1d(train_idxs, val_idxs)) == 0
 
+
 def test_stratified_split_fallback(processor, mocker):
     """Test that we fall back to KFold when stratification isn't possible."""
     # Only 1 sample per class, so StratifiedKFold would fail
-    X = pd.DataFrame({'feat': [1, 2, 3, 4]})
-    y = pd.Series([0, 1, 2, 3], name='target')
-    mocker.patch.object(processor, '_load_data', return_value=(X, y, None, None))
+    X = pd.DataFrame({"feat": [1, 2, 3, 4]})
+    y = pd.Series([0, 1, 2, 3], name="target")
+    mocker.patch.object(processor, "_load_data", return_value=(X, y, None, None))
 
     # Mocks for splitting functions
     def kfold_side_effect(*args, **kwargs):
@@ -113,12 +125,17 @@ def test_stratified_split_fallback(processor, mocker):
 
     mock_kfold_instance = mocker.MagicMock()
     mock_kfold_instance.split.side_effect = kfold_side_effect
-    mock_kfold = mocker.patch('tabkit.data.table_processor.KFold', return_value=mock_kfold_instance)
+    mock_kfold = mocker.patch(
+        "tabkit.data.table_processor.KFold", return_value=mock_kfold_instance
+    )
 
     # StratifiedKFold will be called, but we want to test the KFold fallback path
     mock_stratified_kfold_instance = mocker.MagicMock()
     mock_stratified_kfold_instance.split.side_effect = ValueError("Cannot stratify")
-    mock_stratified_kfold = mocker.patch('tabkit.data.table_processor.StratifiedKFold', return_value=mock_stratified_kfold_instance)
+    mock_stratified_kfold = mocker.patch(
+        "tabkit.data.table_processor.StratifiedKFold",
+        return_value=mock_stratified_kfold_instance,
+    )
 
     processor.config.n_splits = 2
     processor.config.n_val_splits = 2
@@ -129,34 +146,36 @@ def test_stratified_split_fallback(processor, mocker):
     # The if-condition in the code prevents StratifiedKFold from being instantiated.
     mock_stratified_kfold.assert_not_called()
 
+
 def test_classification_with_float_label_discretizes(processor, mocker):
     """Tests that a continuous label is discretized for classification tasks by default."""
-    X = pd.DataFrame({'feat': np.arange(100)})
+    X = pd.DataFrame({"feat": np.arange(100)})
     # Create a continuous, float-based label
-    y = pd.Series(np.linspace(0, 1, 100), name='target')
-    mocker.patch.object(processor, '_load_data', return_value=(X, y, None, None))
+    y = pd.Series(np.linspace(0, 1, 100), name="target")
+    mocker.patch.object(processor, "_load_data", return_value=(X, y, None, None))
 
     # Configure for classification but provide no explicit label pipeline
-    processor.config.task_kind = 'classification'
+    processor.config.task_kind = "classification"
     processor.prepare()
 
-    _, y_processed = processor.get_split('train')
+    _, y_processed = processor.get_split("train")
 
     # Check that the output label is now discrete integers
     assert pd.api.types.is_integer_dtype(y_processed.dtype)
     # Check that it has been binned (default n_bins is 4 for Discretize)
     assert y_processed.nunique() <= 4
 
+
 def test_caching(processor, sample_data, mocker):
     X, y = sample_data
-    mocker.patch.object(processor, '_load_data', return_value=(X, y, None, None))
+    mocker.patch.object(processor, "_load_data", return_value=(X, y, None, None))
 
     # First call, should run preparation and save to cache
     processor.prepare()
     assert processor.is_cached
 
     # Mock the processing method to ensure it's NOT called on the second run
-    mock_get_splits = mocker.patch.object(processor, '_get_splits')
+    mock_get_splits = mocker.patch.object(processor, "_get_splits")
 
     # Create a new processor instance pointing to the same directory
     new_processor = TableProcessor(processor.dataset_config, processor.config)
