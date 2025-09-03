@@ -1,6 +1,6 @@
 [project]
 authors = [{name = "inwonakng", email = "inwon.kang04@gmail.com"}]
-dependencies = ["numpy>=2.2.6,<3", "pandas>=2.3.2,<3", "scikit-learn>=1.7.1,<2", "openml>=0.15.1,<0.16", "ucimlrepo>=0.0.7,<0.0.8", "liac-arff>=2.5.0,<3"]
+dependencies = ["numpy>=2.2.6,<3", "pandas>=2.3.2,<3", "scikit-learn>=1.7.1,<2", "openml>=0.15.1,<0.16", "ucimlrepo>=0.0.7,<0.0.8", "liac-arff>=2.5.0,<3", "build>=1.3.0,<2", "twine>=6.1.0,<7"]
 name = "tabkit"
 requires-python = ">= 3.10"
 version = "0.1.0"
