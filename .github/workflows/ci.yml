@@ -12,4 +12,4 @@ jobs:
           cache: true
           pixi-version: v0.53.0
       - name: Run tests
-        run: pixi run pytest
+        run: pixi run test
