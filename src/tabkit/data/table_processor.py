@@ -334,7 +334,6 @@ class TableProcessor:
             labels=startify_target,
             tr_idxs=tr_idxs,
             te_idxs=te_idxs,
-            label_info=label_info,
             random_state=self.config.random_state,
             n_splits=self.config.n_splits,
             split_idx=self.config.split_idx,
