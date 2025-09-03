@@ -59,7 +59,9 @@ class Impute(BaseTransform):
             if not X[c].isna().any():
                 continue
 
-            if self.method in ["mean", "median"] and not pd.api.types.is_numeric_dtype(X[c]):
+            if self.method in ["mean", "median"] and not pd.api.types.is_numeric_dtype(
+                X[c]
+            ):
                 continue
             if self.method == "constant":
                 self.imputation_values_[c] = self.fill_value
@@ -104,23 +106,26 @@ class Scale(BaseTransform):
 
         if self.method == "standard":
             from sklearn.preprocessing import StandardScaler
+
             self.scaler_ = StandardScaler()
         elif self.method == "minmax":
             from sklearn.preprocessing import MinMaxScaler
+
             self.scaler_ = MinMaxScaler()
         elif self.method == "quantile":
             from sklearn.preprocessing import QuantileTransformer
+
             self.scaler_ = QuantileTransformer(n_quantiles=min(1000, len(X)))
         else:
             raise ValueError(f"Unknown scaler method: {self.method}")
-        
+
         self.scaler_.fit(X[self.cont_cols_])
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         if not self.cont_cols_:
             return X
-            
+
         X_new = X.copy()
         X_new[self.cont_cols_] = self.scaler_.transform(X[self.cont_cols_])
         return X_new
@@ -282,10 +287,10 @@ class ConvertDatetime(BaseTransform):
             if c not in self._datetime_columns:
                 continue
             X_new[c] = pd.to_datetime(
-                    X_new[c],
-                    format="mixed",
-                    errors="coerce",
-                )
+                X_new[c],
+                format="mixed",
+                errors="coerce",
+            )
 
             if self.method == "to_timestamp":
                 X_new[c] = pd.to_numeric(X_new[c]) // 10**9

@@ -107,7 +107,9 @@ class TableProcessor:
         split_idx: int,
     ):
         if split_idx >= n_splits:
-            raise ValueError(f"split_idx={split_idx} must be less than n_splits={n_splits}")
+            raise ValueError(
+                f"split_idx={split_idx} must be less than n_splits={n_splits}"
+            )
 
         unique_labels, unique_labels_count = np.unique(
             stratify_target, return_counts=True
@@ -151,7 +153,6 @@ class TableProcessor:
         labels: np.ndarray,
         tr_idxs: np.ndarray | None = None,
         te_idxs: np.ndarray | None = None,
-        label_info: ColumnMetadata = None,
         random_state: int = 0,
         n_splits: int = 10,
         split_idx: int = 0,
@@ -160,7 +161,7 @@ class TableProcessor:
         sample_n_rows: int | float | None = None,
         val_split_idx: int = 0,
         label_stratify_pipeline: list[dict[str, Any]] | None = None,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Handles splitting the data and filtering column/labels."""
         # if no predefined splits, do it here.
         if tr_idxs is None or te_idxs is None:
@@ -259,14 +260,13 @@ class TableProcessor:
         sample_n_rows: int | float,
         stratify_target: pd.Series | None = None,
         random_state: int = 0,
-    ) -> tuple[pd.DataFrame, pd.Series]:
+    ) -> np.ndarray:
         if sample_n_rows < 0:
             raise ValueError(f"Invalid sample_n_rows: {sample_n_rows}")
         elif sample_n_rows > 1:
             sample_n_rows = int(sample_n_rows)
         else:
             sample_n_rows = float(sample_n_rows)
-
         sampled = tr_idxs
         if sample_n_rows < len(tr_idxs):
             _, sampled = train_test_split(
@@ -275,7 +275,6 @@ class TableProcessor:
                 test_size=sample_n_rows,
                 stratify=stratify_target[tr_idxs],
             )
-
         return sampled
 
     def prepare(self, overwrite: bool = False):
@@ -302,6 +301,23 @@ class TableProcessor:
         if self.config.exclude_columns:
             X = self._filter_columns(X, self.config.exclude_columns)
             self.logger.info("filtered by `exclude_columns`")
+
+        # if the task is classification and the label is continuous, discretize it.
+        if (
+            self.config.task_kind == "classification"
+            and pd.api.types.is_float_dtype(y.dtype)
+            and not self.config.label_pipeline
+        ):
+            self.logger.info(
+                "Continuous label detected for classification task. "
+                "Applying default quantile discretization."
+            )
+            self.config.label_pipeline = [
+                {
+                    "class": "Discretize",
+                    "params": {"method": "quantile", "n_bins": 4},
+                }
+            ]
 
         # preliminary metadata. this will change as we apply transforms
         columns_info = [ColumnMetadata.from_series(X[col]) for col in X.columns]
@@ -451,6 +467,8 @@ class TableProcessor:
                 f"Unsupported file format for key {key}: {file_path.suffix}"
             )
 
-    def get_dataframe() -> pd.DataFrame:
-        """Get the raw dataframe with all columns and the target column."""
+    def get_dataframe(self) -> pd.DataFrame:
+        return self.get_df()
+
+    def get_df(self) -> pd.DataFrame:
         return self.get("raw_df")

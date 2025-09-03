@@ -129,6 +129,26 @@ def test_stratified_split_fallback(processor, mocker):
     # The if-condition in the code prevents StratifiedKFold from being instantiated.
     mock_stratified_kfold.assert_not_called()
 
+def test_classification_with_float_label_discretizes(processor, mocker):
+    """Tests that a continuous label is discretized for classification tasks by default."""
+    X = pd.DataFrame({'feat': np.arange(100)})
+    # Create a continuous, float-based label
+    y = pd.Series(np.linspace(0, 1, 100), name='target')
+    mocker.patch.object(processor, '_load_data', return_value=(X, y, None, None))
+
+    # Configure for classification but provide no explicit label pipeline
+    processor.config.task_kind = 'classification'
+    processor.config.label_pipeline = []
+
+    processor.prepare()
+
+    _, y_processed = processor.get_split('train')
+
+    # Check that the output label is now discrete integers
+    assert pd.api.types.is_integer_dtype(y_processed.dtype)
+    # Check that it has been binned (default n_bins is 4 for Discretize)
+    assert y_processed.nunique() <= 4
+
 def test_caching(processor, sample_data, mocker):
     X, y = sample_data
     mocker.patch.object(processor, '_load_data', return_value=(X, y, None, None))
