@@ -58,6 +58,9 @@ class Impute(BaseTransform):
         for c in X.columns:
             if not X[c].isna().any():
                 continue
+
+            if self.method in ["mean", "median"] and not pd.api.types.is_numeric_dtype(X[c]):
+                continue
             if self.method == "constant":
                 self.imputation_values_[c] = self.fill_value
             elif self.method == "most_frequent":
@@ -94,32 +97,32 @@ class Scale(BaseTransform):
         **kwargs,
     ):
         self.scalers_ = {}
-        for i, c in enumerate(X.columns):
-            if metadata[i].kind != "continuous":
-                continue
-            if self.method == "standard":
-                from sklearn.preprocessing import StandardScaler
+        self.cont_cols_ = [m.name for m in metadata if m.kind == "continuous"]
 
-                scaler = StandardScaler()
-            elif self.method == "minmax":
-                from sklearn.preprocessing import MinMaxScaler
+        if not self.cont_cols_:
+            return self
 
-                scaler = MinMaxScaler()
-            elif self.method == "quantile":
-                from sklearn.preprocessing import QuantileTransformer
-
-                scaler = QuantileTransformer(n_quantiles=min(1000, len(X)))
-            else:
-                raise ValueError(f"Unknown scaler method: {self.method}")
-            self.scalers_[c] = scaler.fit(X[[c]])
+        if self.method == "standard":
+            from sklearn.preprocessing import StandardScaler
+            self.scaler_ = StandardScaler()
+        elif self.method == "minmax":
+            from sklearn.preprocessing import MinMaxScaler
+            self.scaler_ = MinMaxScaler()
+        elif self.method == "quantile":
+            from sklearn.preprocessing import QuantileTransformer
+            self.scaler_ = QuantileTransformer(n_quantiles=min(1000, len(X)))
+        else:
+            raise ValueError(f"Unknown scaler method: {self.method}")
+        
+        self.scaler_.fit(X[self.cont_cols_])
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        if not self.cont_cols_:
+            return X
+            
         X_new = X.copy()
-        for col in X.columns:
-            if c not in X_new.columns:
-                continue
-            X_new[c] = self.scalers_[c].transform(X_new[[c]])
+        X_new[self.cont_cols_] = self.scaler_.transform(X[self.cont_cols_])
         return X_new
 
 
@@ -273,7 +276,8 @@ class ConvertDatetime(BaseTransform):
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X_new = X.copy()
         self._original_columns = X.columns.tolist()
-        self._removed_column_idxs = []
+        self._removed_columns = []
+        self._added_columns = []
         for i, c in enumerate(X.columns):
             if c not in self._datetime_columns:
                 continue
@@ -284,7 +288,7 @@ class ConvertDatetime(BaseTransform):
                 )
 
             if self.method == "to_timestamp":
-                X_new[c] = X_new[c].astype(np.int64) // 10**9
+                X_new[c] = pd.to_numeric(X_new[c]) // 10**9
             elif self.method == "ignore":
                 X_new = X_new.drop(columns=[c])
                 self._removed_columns.append(c)
@@ -295,7 +299,7 @@ class ConvertDatetime(BaseTransform):
                 X_new[c + "_hour"] = X_new[c].dt.hour
                 X_new[c + "_minute"] = X_new[c].dt.minute
                 X_new[c + "_second"] = X_new[c].dt.second
-                self._added_columns + [
+                self._added_columns += [
                     c + "_year",
                     c + "_month",
                     c + "_day",
@@ -304,7 +308,7 @@ class ConvertDatetime(BaseTransform):
                     c + "_second",
                 ]
                 X_new = X_new.drop(columns=[c])
-                self._removed_column_idxs.append(c)
+                self._removed_columns.append(c)
         return X_new
 
     def update_metadata(
@@ -325,19 +329,22 @@ class ConvertDatetime(BaseTransform):
             new_metadata.append(updated_meta)
 
         if self.method == "decompose":
-            for f in [
-                "_year",
-                "_month",
-                "_day",
-                "_hour",
-                "_minute",
-                "_second",
-            ]:
-                new_meta = deepcopy(metadata[0])
-                new_meta.name = col + f
-                new_meta.dtype = "int"
-                new_meta.kind = "continuous"
-                to_add.append(new_meta)
+            for met in metadata:
+                if met.name not in self._datetime_columns:
+                    continue
+                for f in [
+                    "_year",
+                    "_month",
+                    "_day",
+                    "_hour",
+                    "_minute",
+                    "_second",
+                ]:
+                    new_meta = deepcopy(met)
+                    new_meta.name = met.name + f
+                    new_meta.dtype = "int"
+                    new_meta.kind = "continuous"
+                    to_add.append(new_meta)
         new_metadata += to_add
         return new_metadata
 

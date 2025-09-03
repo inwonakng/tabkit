@@ -106,6 +106,9 @@ class TableProcessor:
         random_state: int,
         split_idx: int,
     ):
+        if split_idx >= n_splits:
+            raise ValueError(f"split_idx={split_idx} must be less than n_splits={n_splits}")
+
         unique_labels, unique_labels_count = np.unique(
             stratify_target, return_counts=True
         )
