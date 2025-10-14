@@ -14,7 +14,6 @@ from tabkit.config import DATA_DIR
 from tabkit.utils import setup_logger
 
 from .column_metadata import ColumnMetadata, is_column_categorical
-from .config import DatasetConfig, TableProcessorConfig
 from .transforms import TRANSFORM_MAP, BaseTransform
 from .utils import load_from_disk, load_openml_dataset, load_uci_dataset
 
@@ -111,11 +110,7 @@ def compute_config_hash(config_dict: dict, truncate: int = 16) -> str:
     Excludes 'config_name' and 'dataset_name' as these are used for readable naming.
     """
     # Remove metadata fields that shouldn't affect the hash
-    hashable_config = {
-        k: v
-        for k, v in config_dict.items()
-        if v is not None
-    }
+    hashable_config = {k: v for k, v in config_dict.items() if v is not None}
     # Canonical JSON representation
     canonical_json = json.dumps(hashable_config, sort_keys=True, separators=(",", ":"))
     hash_digest = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
@@ -125,8 +120,6 @@ def compute_config_hash(config_dict: dict, truncate: int = 16) -> str:
 """
 Table Processor Start
 """
-
-
 class TableProcessor:
     config: dict
     dataset_config: dict
@@ -141,8 +134,8 @@ class TableProcessor:
 
     def __init__(
         self,
-        dataset_config: dict | DatasetConfig,
-        config: dict | TableProcessorConfig | None = None,
+        dataset_config: dict | Any,
+        config: dict | Any | None = None,
         verbose: bool = False,
     ):
         # Simple backward compatibility: convert config objects to dicts
@@ -233,7 +226,7 @@ class TableProcessor:
         return [i for i, c in enumerate(self.columns_info) if c["kind"] == "continuous"]
 
     @property
-    def col_names(self) -> str:
+    def col_names(self) -> list[str]:
         return [c["name"] for c in self.columns_info]
 
     @property
@@ -292,7 +285,7 @@ class TableProcessor:
     def _get_splits(
         self,
         X: np.ndarray,
-        labels: np.ndarray,
+        y: np.ndarray,
         tr_idxs: np.ndarray | None = None,
         te_idxs: np.ndarray | None = None,
         random_state: int = 0,
@@ -304,15 +297,15 @@ class TableProcessor:
         val_split_idx: int = 0,
         label_stratify_pipeline: list[dict[str, Any]] | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Handles splitting the data and filtering column/labels."""
+        """Handles splitting the data and filtering column/y."""
         # if no predefined splits, do it here.
         if tr_idxs is None or te_idxs is None:
-            unique_labels, unique_labels_count = np.unique(labels, return_counts=True)
+            unique_y, unique_y_count = np.unique(y, return_counts=True)
             self.logger.info("No predefined split found, splitting data")
             tr_idxs, te_idxs = self._try_stratified_split(
                 X=X,
                 n_splits=n_splits,
-                stratify_target=labels,
+                stratify_target=y,
                 random_state=random_state,
                 split_idx=split_idx,
             )
@@ -330,7 +323,7 @@ class TableProcessor:
             tr_sub_idxs, val_sub_idxs = self._try_stratified_split(
                 X=tr_idxs,
                 n_splits=n_val_splits,
-                stratify_target=labels[tr_idxs],
+                stratify_target=y[tr_idxs],
                 random_state=random_state,
                 split_idx=val_split_idx,
             )
@@ -478,7 +471,7 @@ class TableProcessor:
 
         train_idx, val_idx, test_idx = self._get_splits(
             X=X,
-            labels=startify_target,
+            y=startify_target,
             tr_idxs=tr_idxs,
             te_idxs=te_idxs,
             random_state=self.config["random_state"],
