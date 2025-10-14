@@ -1,4 +1,6 @@
+import hashlib
 import json
+from dataclasses import asdict
 from logging import Logger
 from pathlib import Path
 from typing import Any, Literal
@@ -16,9 +18,118 @@ from .config import DatasetConfig, TableProcessorConfig
 from .transforms import TRANSFORM_MAP, BaseTransform
 from .utils import load_from_disk, load_openml_dataset, load_uci_dataset
 
+"""
+Default configuration values
+"""
+
+DEFAULT_PIPELINE = [
+    {
+        "class": "Impute",
+        "params": {
+            "method": "most_frequent",
+        },
+    },
+    {
+        "class": "Encode",
+        "params": {
+            "method": "most_frequent",
+        },
+    },
+    {
+        "class": "ConvertDatetime",
+        "params": {
+            "method": "to_timestamp",
+        },
+    },
+]
+
+DEFAULT_LABEL_PIPELINE_REG = [
+    {
+        "class": "Encode",
+        "params": {"method": "most_frequent"},
+    },
+]
+
+DEFAULT_LABEL_PIPELINE_CLF = [
+    {
+        "class": "Encode",
+        "params": {"method": "most_frequent"},
+    },
+    {
+        "class": "Discretize",
+        "params": {"method": "quantile", "n_bins": 4},
+    },
+]
+
+DEFAULT_DATASET_CONFIG = {
+    "dataset_name": "default",
+    "data_source": None,
+    "openml_task_id": None,
+    "openml_dataset_id": None,
+    "openml_split_idx": None,
+    "uci_dataset_id": None,
+    "automm_dataset_id": None,
+    "file_path": None,
+    "file_type": None,
+    "label_col": None,
+    "split_file_path": None,
+}
+
+DEFAULT_TABLE_PROCESSOR_CONFIG = {
+    "pipeline": DEFAULT_PIPELINE,
+    "task_kind": "classification",
+    "n_splits": 10,
+    "split_idx": 0,
+    "n_val_splits": 9,
+    "val_split_idx": 0,
+    "random_state": 0,
+    "split_validation": True,
+    "exclude_columns": None,
+    "exclude_labels": None,
+    "sample_n_rows": None,
+    "label_pipeline": None,  # Will be set based on task_kind
+    "label_stratify_pipeline": None,  # Will be set to DEFAULT_LABEL_PIPELINE_REG
+}
+
+
+def merge_config_with_defaults(user_config: dict, defaults: dict) -> dict:
+    """
+    Merge user-provided config with default values.
+    User values override defaults. Performs shallow merge.
+    """
+    result = defaults.copy()
+    if user_config:
+        result.update(
+            {k: v for k, v in user_config.items() if v is not None and k in defaults}
+        )
+    return result
+
+
+def compute_config_hash(config_dict: dict, truncate: int = 16) -> str:
+    """
+    Compute a deterministic hash from config dictionary for cache directory naming.
+    Excludes 'config_name' and 'dataset_name' as these are used for readable naming.
+    """
+    # Remove metadata fields that shouldn't affect the hash
+    hashable_config = {
+        k: v
+        for k, v in config_dict.items()
+        if v is not None
+    }
+    # Canonical JSON representation
+    canonical_json = json.dumps(hashable_config, sort_keys=True, separators=(",", ":"))
+    hash_digest = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+    return hash_digest[:truncate]
+
+
+"""
+Table Processor Start
+"""
+
 
 class TableProcessor:
-    config: TableProcessorConfig
+    config: dict
+    dataset_config: dict
     dataset_name: str
     save_dir: Path
     logger: Logger
@@ -30,21 +141,52 @@ class TableProcessor:
 
     def __init__(
         self,
-        dataset_config: DatasetConfig,
-        config: TableProcessorConfig | None = None,
+        dataset_config: dict | DatasetConfig,
+        config: dict | TableProcessorConfig | None = None,
         verbose: bool = False,
     ):
-        if config is None:
-            config = TableProcessorConfig()
-        self.config = config
-        self.dataset_config = dataset_config
-        self.dataset_name = dataset_config.dataset_name
-        self.save_dir = (
-            DATA_DIR
-            / "data"
-            / self.dataset_config.get_unique_name()
-            / self.config.get_unique_name()
+        # Simple backward compatibility: convert config objects to dicts
+        if not isinstance(dataset_config, dict):
+            if hasattr(dataset_config, "to_dict"):
+                dataset_config = dataset_config.to_dict()
+            else:
+                dataset_config = asdict(dataset_config)
+
+        if config is not None and not isinstance(config, dict):
+            if hasattr(config, "to_dict"):
+                config = config.to_dict()
+            else:
+                config = asdict(config)
+
+        # Merge with defaults
+        self.dataset_config = merge_config_with_defaults(
+            dataset_config, DEFAULT_DATASET_CONFIG
         )
+        self.config = merge_config_with_defaults(
+            config or {}, DEFAULT_TABLE_PROCESSOR_CONFIG
+        )
+
+        # Handle conditional defaults based on task_kind
+        if self.config["label_pipeline"] is None:
+            if self.config["task_kind"] == "classification":
+                self.config["label_pipeline"] = DEFAULT_LABEL_PIPELINE_CLF
+            else:
+                self.config["label_pipeline"] = DEFAULT_LABEL_PIPELINE_REG
+
+        if self.config["label_stratify_pipeline"] is None:
+            self.config["label_stratify_pipeline"] = DEFAULT_LABEL_PIPELINE_REG
+
+        # Extract dataset name
+        self.dataset_name = self.dataset_config.get("dataset_name", "default")
+
+        # Compute cache directory using hash
+        # dataset_name = self.dataset_config.get("dataset_name", "dataset")
+        dataset_hash = compute_config_hash(self.dataset_config)
+        # config_name = self.config.get("config_name", "default")
+        config_hash = compute_config_hash(self.config)
+
+        self.save_dir = DATA_DIR / "data" / dataset_hash / config_hash
+
         self.logger = setup_logger("TableProcessor", silent=not verbose)
         self.verbose = verbose
 
@@ -121,7 +263,7 @@ class TableProcessor:
                 random_state=random_state,
             )
             tr_idxs, te_idxs = list(splitter.split(X, stratify_target))[
-                self.config.split_idx
+                self.config["split_idx"]
             ]
         else:
             splitter = KFold(
@@ -178,9 +320,9 @@ class TableProcessor:
         if sample_n_rows is not None:
             tr_idxs = self._subsample_data(
                 tr_idxs=tr_idxs,
-                sample_n_rows=self.config.sample_n_rows,
+                sample_n_rows=self.config["sample_n_rows"],
                 stratify_target=y,
-                random_state=self.config.random_state,
+                random_state=self.config["random_state"],
             )
             self.logger.info("subsampled by `sample_n_rows`")
 
@@ -212,29 +354,31 @@ class TableProcessor:
         np.ndarray | None,
     ]:
         tr_idxs, te_idxs = None, None
-        if self.dataset_config.data_source == "openml":
+        if self.dataset_config["data_source"] == "openml":
             X, y, tr_idxs, te_idxs = load_openml_dataset(
-                task_id=(self.dataset_config.openml_task_id),
-                dataset_id=(self.dataset_config.openml_dataset_id),
-                split_idx=self.dataset_config.openml_split_idx,
-                random_state=self.config.random_state,
+                task_id=(self.dataset_config["openml_task_id"]),
+                dataset_id=(self.dataset_config["openml_dataset_id"]),
+                split_idx=self.dataset_config["openml_split_idx"],
+                random_state=self.config["random_state"],
             )
             self.logger.info("Loaded openml data")
-        elif self.dataset_config.data_source == "uci":
-            X, y = load_uci_dataset(dataset_id=self.dataset_config.uci_dataset_id)
-        elif self.dataset_config.data_source == "automm":
+        elif self.dataset_config["data_source"] == "uci":
+            X, y = load_uci_dataset(dataset_id=self.dataset_config["uci_dataset_id"])
+        elif self.dataset_config["data_source"] == "automm":
             X, y, tr_idxs, te_idxs = load_automm_dataset(
-                dataset_id=self.dataset_config.automm_dataset_id,
+                dataset_id=self.dataset_config["automm_dataset_id"],
             )
-        elif self.dataset_config.data_source == "disk":
+        elif self.dataset_config["data_source"] == "disk":
             X, y, tr_idxs, te_idxs = load_from_disk(
-                file_path=self.dataset_config.file_path,
-                file_type=self.dataset_config.file_type,
-                label_col=self.dataset_config.label_col,
-                split_file_path=self.dataset_config.split_file_path,
+                file_path=self.dataset_config["file_path"],
+                file_type=self.dataset_config["file_type"],
+                label_col=self.dataset_config["label_col"],
+                split_file_path=self.dataset_config["split_file_path"],
             )
         else:
-            raise ValueError(f"Unknown data source {self.dataset_config.data_source}")
+            raise ValueError(
+                f"Unknown data source {self.dataset_config['data_source']}"
+            )
         return X, y, tr_idxs, te_idxs
 
     def _filter_labels(
@@ -247,10 +391,10 @@ class TableProcessor:
     def _filter_columns(
         self, X: pd.DataFrame, exclude_columns: list[str]
     ) -> pd.DataFrame:
-        missing_cols = [c for c in self.config.exclude_columns if c not in X.columns]
+        missing_cols = [c for c in self.config["exclude_columns"] if c not in X.columns]
         if len(missing_cols) > 0:
             raise ValueError("columns {} are not in the dataset!".format(missing_cols))
-        columns_filter = ~X.columns.isin(self.config.exclude_columns)
+        columns_filter = ~X.columns.isin(self.config["exclude_columns"])
         X = X[X.columns[columns_filter]].reset_index(drop=True).copy()
         return X
 
@@ -279,7 +423,7 @@ class TableProcessor:
 
     def prepare(self, overwrite: bool = False):
         if self.is_cached and not overwrite:
-            self.logger.info("Loading from cache.")
+            # self.logger.info("Loading from cache.")
             self.pipeline = joblib.load(self.save_dir / "pipeline.joblib")
             self.label_pipeline = joblib.load(self.save_dir / "label_pipeline.joblib")
             with open(self.save_dir / "dataset_info.json") as f:
@@ -295,24 +439,27 @@ class TableProcessor:
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
         X, y, tr_idxs, te_idxs = self._load_data()
-        if self.config.exclude_labels and self.config.task_kind == "classification":
-            X, y = self._filter_labels(X, y, self.config.exclude_labels)
+        if (
+            self.config["exclude_labels"]
+            and self.config["task_kind"] == "classification"
+        ):
+            X, y = self._filter_labels(X, y, self.config["exclude_labels"])
             self.logger.info("filtered by `exclude_labels`")
-        if self.config.exclude_columns:
-            X = self._filter_columns(X, self.config.exclude_columns)
+        if self.config["exclude_columns"]:
+            X = self._filter_columns(X, self.config["exclude_columns"])
             self.logger.info("filtered by `exclude_columns`")
 
         # if the task is classification and the label is continuous, discretize it.
         if (
-            self.config.task_kind == "classification"
+            self.config["task_kind"] == "classification"
             and not is_column_categorical(y)
-            and not self.config.label_pipeline
+            and not self.config["label_pipeline"]
         ):
             self.logger.info(
                 "Continuous label detected for classification task. "
                 "Applying default quantile discretization."
             )
-            self.config.label_pipeline = [
+            self.config["label_pipeline"] = [
                 {
                     "class": "Discretize",
                     "params": {"method": "quantile", "n_bins": 4},
@@ -326,7 +473,7 @@ class TableProcessor:
         startify_target = self._prepare_split_target(
             y=y,
             label_info=label_info,
-            label_stratify_pipeline=self.config.label_stratify_pipeline,
+            label_stratify_pipeline=self.config["label_stratify_pipeline"],
         )
 
         train_idx, val_idx, test_idx = self._get_splits(
@@ -334,21 +481,21 @@ class TableProcessor:
             labels=startify_target,
             tr_idxs=tr_idxs,
             te_idxs=te_idxs,
-            random_state=self.config.random_state,
-            n_splits=self.config.n_splits,
-            split_idx=self.config.split_idx,
-            n_val_splits=self.config.n_val_splits,
-            split_validation=self.config.split_validation,
-            val_split_idx=self.config.val_split_idx,
-            label_stratify_pipeline=self.config.label_stratify_pipeline,
+            random_state=self.config["random_state"],
+            n_splits=self.config["n_splits"],
+            split_idx=self.config["split_idx"],
+            n_val_splits=self.config["n_val_splits"],
+            split_validation=self.config["split_validation"],
+            val_split_idx=self.config["val_split_idx"],
+            label_stratify_pipeline=self.config["label_stratify_pipeline"],
         )
 
         X_train, y_train = X.loc[train_idx], y.loc[train_idx]
         X_val, y_val = X.loc[val_idx], y.loc[val_idx]
         X_test, y_test = X.loc[test_idx], y.loc[test_idx]
 
-        self.pipeline = self._instantiate_pipeline(self.config.pipeline)
-        self.label_pipeline = self._instantiate_pipeline(self.config.label_pipeline)
+        self.pipeline = self._instantiate_pipeline(self.config["pipeline"])
+        self.label_pipeline = self._instantiate_pipeline(self.config["label_pipeline"])
 
         self.logger.info("Fitting pipeline...")
         for transform in self.pipeline:
@@ -356,7 +503,7 @@ class TableProcessor:
                 X=X_train,
                 y=y_train,
                 metadata=columns_info,
-                random_state=self.config.random_state,
+                random_state=self.config["random_state"],
             )
             X_val = transform.transform(X=X_val)
             X_test = transform.transform(X=X_test)
@@ -371,7 +518,7 @@ class TableProcessor:
                 X=y_train.to_frame(),
                 y=None,
                 metadata=[label_info],
-                random_state=self.config.random_state,
+                random_state=self.config["random_state"],
             ).iloc[:, 0]
             y_val = transform.transform(y_val.to_frame()).iloc[:, 0]
             y_test = transform.transform(y_test.to_frame()).iloc[:, 0]
@@ -400,7 +547,7 @@ class TableProcessor:
         joblib.dump(self.pipeline, self.save_dir / "pipeline.joblib")
         joblib.dump(self.label_pipeline, self.save_dir / "label_pipeline.joblib")
         with open(self.save_dir / "config.json", "w") as f:
-            json.dump(self.config.to_dict(), f, indent=2)
+            json.dump(self.config, f, indent=2)
 
         # save the raw df and the indices as well.
         df = X.copy()

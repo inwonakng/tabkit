@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tabkit.data.config import DatasetConfig, TableProcessorConfig
 from tabkit.data.table_processor import TableProcessor
 from tabkit.data.transforms import BaseTransform
 
@@ -35,23 +34,23 @@ def sample_data():
 @pytest.fixture
 def dataset_config():
     # Using a dummy config that doesn't rely on real data sources
-    return DatasetConfig(
-        dataset_name="test_dataset",
-        data_source="disk",
-        file_path="dummy.csv",
-        file_type="csv",
-    )
+    return {
+        "dataset_name": "test_dataset",
+        "data_source": "disk",
+        "file_path": "dummy.csv",
+        "file_type": "csv",
+    }
 
 
 @pytest.fixture
 def table_processor_config():
-    return TableProcessorConfig(
-        pipeline=[
+    return {
+        "pipeline": [
             {"class": "Impute", "params": {"method": "mean"}},
         ],
-        n_splits=5,
-        n_val_splits=4,
-    )
+        "n_splits": 5,
+        "n_val_splits": 4,
+    }
 
 
 @pytest.fixture
@@ -71,7 +70,7 @@ def test_prepare_pipeline_execution(processor, sample_data, mocker):
     mock_transform_instance = MockTransform()
 
     def mock_instantiate_pipeline(config_list):
-        if config_list == processor.config.pipeline:
+        if config_list == processor.config["pipeline"]:
             return [mock_transform_instance]
         return []
 
@@ -137,8 +136,8 @@ def test_stratified_split_fallback(processor, mocker):
         return_value=mock_stratified_kfold_instance,
     )
 
-    processor.config.n_splits = 2
-    processor.config.n_val_splits = 2
+    processor.config["n_splits"] = 2
+    processor.config["n_val_splits"] = 2
     processor.prepare()
 
     # Check that KFold was used as a fallback, and StratifiedKFold was not.
@@ -155,7 +154,7 @@ def test_classification_with_float_label_discretizes(processor, mocker):
     mocker.patch.object(processor, "_load_data", return_value=(X, y, None, None))
 
     # Configure for classification but provide no explicit label pipeline
-    processor.config.task_kind = "classification"
+    processor.config["task_kind"] = "classification"
     processor.prepare()
 
     _, y_processed = processor.get_split("train")
