@@ -1514,8 +1514,8 @@ packages:
   requires_python: '>=2.7,!=3.0.*,!=3.1.*,!=3.2.*'
 - pypi: ./
   name: tabkit
-  version: 0.1.0
-  sha256: 71a01855bd6a63c146b0820c91faba4c46a083df43329387d4185b943d5cffbd
+  version: 0.1.1
+  sha256: 52b13b561b65c2efcb11a3ba66dfec5db45a3adbbb91f07476fb25dd4a423ad0
   requires_dist:
   - numpy>=2.2.6,<3
   - pandas>=2.3.2,<3
