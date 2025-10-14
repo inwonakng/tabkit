@@ -184,3 +184,86 @@ def test_caching(processor, sample_data, mocker):
     new_processor.prepare()
 
     mock_get_splits.assert_not_called()
+
+
+def test_ratio_based_splitting(dataset_config, sample_data, mocker, tmp_path):
+    """Test ratio-based splitting mode."""
+    X, y = sample_data
+
+    # Configure with ratios instead of K-fold
+    ratio_config = {
+        "test_ratio": 0.2,   # 20% test
+        "val_ratio": 0.1,    # 10% val
+        "random_state": 42
+    }
+
+    processor = TableProcessor(dataset_config, ratio_config)
+    processor.save_dir = tmp_path / "ratio_split_data"
+    mocker.patch.object(processor, "_load_data", return_value=(X, y, None, None))
+
+    processor.prepare()
+
+    train_idxs = np.load(processor.save_dir / "train_idxs.npy")
+    val_idxs = np.load(processor.save_dir / "val_idxs.npy")
+    test_idxs = np.load(processor.save_dir / "test_idxs.npy")
+
+    # Check approximate sizes (allowing for rounding)
+    total = len(X)
+    assert len(test_idxs) == pytest.approx(total * 0.2, abs=2)
+    assert len(val_idxs) == pytest.approx(total * 0.1, abs=2)
+    assert len(train_idxs) == pytest.approx(total * 0.7, abs=2)
+
+    # Check no overlap
+    assert len(np.intersect1d(train_idxs, test_idxs)) == 0
+    assert len(np.intersect1d(val_idxs, test_idxs)) == 0
+    assert len(np.intersect1d(train_idxs, val_idxs)) == 0
+
+    # Check all indices are covered
+    all_idxs = np.concatenate([train_idxs, val_idxs, test_idxs])
+    assert len(np.unique(all_idxs)) == total
+
+
+def test_ratio_mode_takes_precedence(dataset_config, sample_data, mocker, tmp_path):
+    """Test that ratio mode takes precedence when both modes are configured."""
+    X, y = sample_data
+
+    # Configure with BOTH ratios and k-fold params
+    config = {
+        "test_ratio": 0.3,   # Ratio mode
+        "val_ratio": 0.2,    # Ratio mode
+        "n_splits": 5,       # K-fold mode (should be ignored)
+        "split_idx": 0,      # K-fold mode (should be ignored)
+        "random_state": 42
+    }
+
+    processor = TableProcessor(dataset_config, config)
+    processor.save_dir = tmp_path / "precedence_test"
+    mocker.patch.object(processor, "_load_data", return_value=(X, y, None, None))
+
+    processor.prepare()
+
+    test_idxs = np.load(processor.save_dir / "test_idxs.npy")
+
+    # If ratio mode is used, test should be ~30%
+    # If K-fold is used, test would be 20% (1/5)
+    total = len(X)
+    assert len(test_idxs) == pytest.approx(total * 0.3, abs=2)
+
+
+def test_invalid_ratios_raise_error(dataset_config, sample_data, mocker, tmp_path):
+    """Test that invalid ratio combinations raise errors."""
+    X, y = sample_data
+
+    # Ratios that sum to >= 1.0 should fail
+    invalid_config = {
+        "test_ratio": 0.6,
+        "val_ratio": 0.5,  # 0.6 + 0.5 = 1.1 > 1.0
+        "random_state": 42
+    }
+
+    processor = TableProcessor(dataset_config, invalid_config)
+    processor.save_dir = tmp_path / "invalid_ratios"
+    mocker.patch.object(processor, "_load_data", return_value=(X, y, None, None))
+
+    with pytest.raises(ValueError, match="must be < 1.0"):
+        processor.prepare()

@@ -77,17 +77,22 @@ DEFAULT_DATASET_CONFIG = {
 DEFAULT_TABLE_PROCESSOR_CONFIG = {
     "pipeline": DEFAULT_PIPELINE,
     "task_kind": "classification",
+    # Ratio-based splitting (if set, takes precedence over K-fold)
+    "test_ratio": None,
+    "val_ratio": None,
+    # K-fold splitting (used if test_ratio/val_ratio are None)
     "n_splits": 10,
     "split_idx": 0,
     "n_val_splits": 9,
     "val_split_idx": 0,
-    "random_state": 0,
     "split_validation": True,
+    # Other options
+    "random_state": 0,
     "exclude_columns": None,
     "exclude_labels": None,
     "sample_n_rows": None,
-    "label_pipeline": None,  # Will be set based on task_kind
-    "label_stratify_pipeline": None,  # Will be set to DEFAULT_LABEL_PIPELINE_REG
+    "label_pipeline": None,
+    "label_stratify_pipeline": None,
 }
 
 
@@ -117,10 +122,112 @@ def compute_config_hash(config_dict: dict, truncate: int = 16) -> str:
     return hash_digest[:truncate]
 
 
+# TableProcessor class docstring (defined at module level for readability)
+_TABLEPROCESSOR_DOC = """
+Preprocesses and splits tabular datasets with automatic caching.
+
+TableProcessor handles loading, preprocessing, and splitting tabular data into
+train/validation/test sets. All preprocessing is cached based on configuration
+hash for reproducibility and performance.
+
+Args:
+    dataset_config: Configuration for data loading. Can be a dict or config object.
+    config: Configuration for preprocessing and splitting. Can be a dict or config object.
+    verbose: Whether to print logging information.
+
+Dataset Configuration Options:
+    dataset_name (str): Name for your dataset
+    data_source (str): Source type - "disk", "openml", "uci", "automm"
+    file_path (str): Path to data file (required for "disk" source)
+    file_type (str): "csv" or "parquet" (required for "disk" source)
+    label_col (str): Name of the target column
+    openml_task_id (int): OpenML task ID (for "openml" source)
+    openml_dataset_id (int): OpenML dataset ID (for "openml" source)
+    split_file_path (str): Path to predefined split indices
+
+Processor Configuration Options:
+    task_kind (str): "classification" or "regression" (default: "classification")
+    random_state (int): Random seed for reproducibility (default: 0)
+
+    pipeline (list[dict]): Preprocessing pipeline steps. Each step is a dict with:
+        - "class": Transform class name (e.g., "Impute", "Encode", "Scale")
+        - "params": Dict of parameters for the transform
+        Default: [Impute, Encode, ConvertDatetime]
+
+    label_pipeline (list[dict]): Pipeline for label preprocessing (default: based on task_kind)
+    label_stratify_pipeline (list[dict]): Pipeline for creating stratification target
+
+    exclude_columns (list[str]): Column names to exclude from features
+    exclude_labels (list[str]): Label values to filter out (classification only)
+    sample_n_rows (int|float): Subsample training data (int for count, float for fraction)
+
+    --- SPLITTING CONFIGURATION ---
+
+    Two splitting modes are supported. Priority: if both test_ratio and val_ratio
+    are set, ratio-based splitting is used. Otherwise, K-fold splitting is used.
+
+    MODE 1: Ratio-Based Splitting (Quick & Simple)
+        Use when: You want simple percentage splits for quick experiments
+
+        test_ratio (float): Fraction for test set (e.g., 0.2 = 20%)
+        val_ratio (float): Fraction for validation set (e.g., 0.1 = 10%)
+
+        Example: {"test_ratio": 0.2, "val_ratio": 0.1} → 70/10/20 split
+
+        Characteristics:
+        - Single random split based on percentages
+        - Fast and intuitive
+        - No systematic dataset coverage across runs
+
+    MODE 2: K-Fold Based Splitting (Robust & Reproducible)
+        Use when: You need cross-validation or full dataset coverage
+
+        n_splits (int): Number of folds for train/test split (default: 10)
+        split_idx (int): Which fold to use as test set (0 to n_splits-1)
+        n_val_splits (int): Number of folds for train/val split (default: 9)
+        val_split_idx (int): Which fold to use as validation (0 to n_val_splits-1)
+        split_validation (bool): Whether to split training data into train/val
+
+        Example: {"n_splits": 5, "split_idx": 0} → Use fold 0 as test (20%)
+
+        Characteristics:
+        - By varying split_idx from 0 to n_splits-1, every sample appears
+          in the test set exactly once across all runs
+        - Enables comprehensive model evaluation and benchmarking
+        - Systematic coverage of entire dataset
+
+Example:
+    >>> # Ratio-based splitting
+    >>> processor = TableProcessor(
+    ...     dataset_config={"data_source": "disk", "file_path": "data.csv",
+    ...                     "label_col": "target", "dataset_name": "my_data"},
+    ...     config={"test_ratio": 0.2, "val_ratio": 0.1}
+    ... )
+    >>> processor.prepare()
+    >>> X_train, y_train = processor.get_split("train")
+
+    >>> # K-fold splitting
+    >>> processor = TableProcessor(
+    ...     dataset_config={"data_source": "disk", "file_path": "data.csv",
+    ...                     "label_col": "target", "dataset_name": "my_data"},
+    ...     config={"n_splits": 5, "split_idx": 0}
+    ... )
+    >>> processor.prepare()
+    >>> X_test, y_test = processor.get_split("test")
+
+Attributes:
+    config (dict): Merged processor configuration
+    dataset_config (dict): Merged dataset configuration
+    columns_info (list[ColumnMetadata]): Metadata for each feature column
+    label_info (ColumnMetadata): Metadata for label column
+    save_dir (Path): Cache directory for processed data
+    n_samples (int): Total number of samples in dataset
 """
-Table Processor Start
-"""
+
+
 class TableProcessor:
+    __doc__ = _TABLEPROCESSOR_DOC
+
     config: dict
     dataset_config: dict
     dataset_name: str
@@ -282,7 +389,7 @@ class TableProcessor:
                 ).iloc[:, 0]
         return labels
 
-    def _get_splits(
+    def _get_splits_kfold(
         self,
         X: np.ndarray,
         y: np.ndarray,
@@ -295,13 +402,33 @@ class TableProcessor:
         split_validation: bool = True,
         sample_n_rows: int | float | None = None,
         val_split_idx: int = 0,
-        label_stratify_pipeline: list[dict[str, Any]] | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Handles splitting the data and filtering column/y."""
+        """
+        K-fold based splitting for robust cross-validation.
+
+        This method uses K-fold cross-validation to split data into train/val/test sets.
+        By varying split_idx across different runs, you can ensure every sample appears
+        in the test set exactly once, enabling comprehensive model evaluation.
+
+        Args:
+            X: Feature data
+            y: Stratification target (preprocessed labels for splitting)
+            tr_idxs: Predefined training indices (optional, from data source)
+            te_idxs: Predefined test indices (optional, from data source)
+            random_state: Random seed
+            n_splits: Number of folds for train/test split
+            split_idx: Which fold to use as test set
+            n_val_splits: Number of folds for train/val split
+            split_validation: Whether to create validation split
+            sample_n_rows: Optional subsampling of training data
+            val_split_idx: Which fold to use as validation set
+
+        Returns:
+            Tuple of (train_indices, val_indices, test_indices)
+        """
         # if no predefined splits, do it here.
         if tr_idxs is None or te_idxs is None:
-            unique_y, unique_y_count = np.unique(y, return_counts=True)
-            self.logger.info("No predefined split found, splitting data")
+            self.logger.info("No predefined split found, using K-fold splitting")
             tr_idxs, te_idxs = self._try_stratified_split(
                 X=X,
                 n_splits=n_splits,
@@ -331,12 +458,193 @@ class TableProcessor:
             tr_sub_idxs = np.arange(len(tr_idxs))
             val_sub_idxs = np.arange(len(tr_idxs))
 
-        self.logger.info("Split indices using target column")
+        self.logger.info("K-fold split complete")
         return (
             tr_idxs[tr_sub_idxs],
             tr_idxs[val_sub_idxs],
             te_idxs,
         )
+
+    def _get_splits_ratio(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        test_ratio: float,
+        val_ratio: float,
+        random_state: int = 0,
+        sample_n_rows: int | float | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Ratio-based splitting for simple train/val/test splits.
+
+        This method creates a simple random split based on specified percentages.
+        It's faster and more intuitive than K-fold, but doesn't provide full
+        dataset coverage across different runs.
+
+        Args:
+            X: Feature data
+            y: Stratification target (preprocessed labels for splitting)
+            test_ratio: Fraction of data to use for test (e.g., 0.2 for 20%)
+            val_ratio: Fraction of data to use for validation (e.g., 0.1 for 10%)
+            random_state: Random seed
+            sample_n_rows: Optional subsampling of training data
+
+        Returns:
+            Tuple of (train_indices, val_indices, test_indices)
+
+        Raises:
+            ValueError: If test_ratio + val_ratio >= 1.0
+        """
+        if test_ratio + val_ratio >= 1.0:
+            raise ValueError(
+                f"test_ratio ({test_ratio}) + val_ratio ({val_ratio}) must be < 1.0"
+            )
+
+        n_samples = len(X)
+        all_idxs = np.arange(n_samples)
+
+        self.logger.info(
+            f"Using ratio-based split: test={test_ratio:.1%}, val={val_ratio:.1%}, "
+            f"train={1-test_ratio-val_ratio:.1%}"
+        )
+
+        # First split: separate test set
+        try:
+            train_val_idxs, test_idxs = train_test_split(
+                all_idxs,
+                test_size=test_ratio,
+                stratify=y,
+                random_state=random_state,
+            )
+        except ValueError as e:
+            # Fallback to non-stratified if stratification fails (e.g., too few samples per class)
+            self.logger.warning(f"Stratified split failed: {e}. Using non-stratified split.")
+            train_val_idxs, test_idxs = train_test_split(
+                all_idxs,
+                test_size=test_ratio,
+                random_state=random_state,
+            )
+
+        # Second split: separate validation from training
+        val_ratio_adjusted = val_ratio / (1 - test_ratio)  # Adjust for remaining data
+
+        try:
+            train_idxs, val_idxs = train_test_split(
+                train_val_idxs,
+                test_size=val_ratio_adjusted,
+                stratify=y[train_val_idxs],
+                random_state=random_state,
+            )
+        except ValueError as e:
+            self.logger.warning(f"Stratified split failed: {e}. Using non-stratified split.")
+            train_idxs, val_idxs = train_test_split(
+                train_val_idxs,
+                test_size=val_ratio_adjusted,
+                random_state=random_state,
+            )
+
+        # Optional subsampling
+        if sample_n_rows is not None:
+            train_idxs = self._subsample_data(
+                tr_idxs=train_idxs,
+                sample_n_rows=sample_n_rows,
+                stratify_target=y,
+                random_state=random_state,
+            )
+            self.logger.info("subsampled by `sample_n_rows`")
+
+        self.logger.info("Ratio-based split complete")
+        return train_idxs, val_idxs, test_idxs
+
+    def _get_splits(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        tr_idxs: np.ndarray | None = None,
+        te_idxs: np.ndarray | None = None,
+        random_state: int = 0,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Router method that selects between K-fold and ratio-based splitting.
+
+        PRIORITY: If test_ratio and val_ratio are set in config, uses ratio-based splitting.
+                  Otherwise, uses K-fold based splitting.
+
+        For predefined splits (tr_idxs, te_idxs provided by data source):
+        - If using ratio mode: Only val_ratio is used to split the predefined train portion
+        - If using kfold mode: Only n_val_splits is used to split the predefined train portion
+
+        Returns:
+            Tuple of (train_indices, val_indices, test_indices)
+        """
+        # Check which mode to use
+        test_ratio = self.config.get("test_ratio")
+        val_ratio = self.config.get("val_ratio")
+        use_ratio_mode = test_ratio is not None and val_ratio is not None
+
+        # Handle predefined splits from data source (e.g., OpenML, UCI)
+        if tr_idxs is not None and te_idxs is not None:
+            self.logger.info("Using predefined train/test split from data source")
+
+            # Only split the predefined training portion into train/val
+            if use_ratio_mode:
+                # Use ratio to split train into train+val
+                val_ratio_adjusted = val_ratio / (1 - test_ratio)
+                try:
+                    train_idxs, val_idxs = train_test_split(
+                        tr_idxs,
+                        test_size=val_ratio_adjusted,
+                        stratify=y[tr_idxs],
+                        random_state=random_state,
+                    )
+                except ValueError:
+                    train_idxs, val_idxs = train_test_split(
+                        tr_idxs,
+                        test_size=val_ratio_adjusted,
+                        random_state=random_state,
+                    )
+            else:
+                # Use K-fold to split train into train+val
+                if self.config["split_validation"]:
+                    tr_sub_idxs, val_sub_idxs = self._try_stratified_split(
+                        X=tr_idxs,
+                        n_splits=self.config["n_val_splits"],
+                        stratify_target=y[tr_idxs],
+                        random_state=random_state,
+                        split_idx=self.config["val_split_idx"],
+                    )
+                    train_idxs = tr_idxs[tr_sub_idxs]
+                    val_idxs = tr_idxs[val_sub_idxs]
+                else:
+                    train_idxs = tr_idxs
+                    val_idxs = tr_idxs
+
+            return train_idxs, val_idxs, te_idxs
+
+        # No predefined splits - use selected mode
+        if use_ratio_mode:
+            return self._get_splits_ratio(
+                X=X,
+                y=y,
+                test_ratio=test_ratio,
+                val_ratio=val_ratio,
+                random_state=random_state,
+                sample_n_rows=self.config.get("sample_n_rows"),
+            )
+        else:
+            return self._get_splits_kfold(
+                X=X,
+                y=y,
+                tr_idxs=None,
+                te_idxs=None,
+                random_state=random_state,
+                n_splits=self.config["n_splits"],
+                split_idx=self.config["split_idx"],
+                n_val_splits=self.config["n_val_splits"],
+                split_validation=self.config["split_validation"],
+                sample_n_rows=self.config.get("sample_n_rows"),
+                val_split_idx=self.config["val_split_idx"],
+            )
 
     def _load_data(
         self,
@@ -463,7 +771,7 @@ class TableProcessor:
         columns_info = [ColumnMetadata.from_series(X[col]) for col in X.columns]
         label_info = ColumnMetadata.from_series(y)
 
-        startify_target = self._prepare_split_target(
+        stratify_target = self._prepare_split_target(
             y=y,
             label_info=label_info,
             label_stratify_pipeline=self.config["label_stratify_pipeline"],
@@ -471,16 +779,10 @@ class TableProcessor:
 
         train_idx, val_idx, test_idx = self._get_splits(
             X=X,
-            y=startify_target,
+            y=stratify_target,
             tr_idxs=tr_idxs,
             te_idxs=te_idxs,
             random_state=self.config["random_state"],
-            n_splits=self.config["n_splits"],
-            split_idx=self.config["split_idx"],
-            n_val_splits=self.config["n_val_splits"],
-            split_validation=self.config["split_validation"],
-            val_split_idx=self.config["val_split_idx"],
-            label_stratify_pipeline=self.config["label_stratify_pipeline"],
         )
 
         X_train, y_train = X.loc[train_idx], y.loc[train_idx]
