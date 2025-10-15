@@ -1515,8 +1515,8 @@ packages:
   requires_python: '>=2.7,!=3.0.*,!=3.1.*,!=3.2.*'
 - pypi: ./
   name: table-toolkit
-  version: 2025.10.15a0
-  sha256: 7eb066e1bc7cbedfd0cbf64337dcce64ee39a9e21ebd675a9323119f7d29d9e0
+  version: 2025.10.15.post1
+  sha256: 4f436450d36df81a5992f0bce01dbfde5ca74ea2e6a3d61631130c52019d0641
   requires_dist:
   - numpy>=2.2.6,<3
   - pandas>=2.3.2,<3
