@@ -5,8 +5,54 @@ These provide type-safe, autocomplete-friendly configuration options.
 You can still use plain dictionaries if you prefer - both work!
 """
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Literal
+
+
+# Default pipeline configurations
+def get_default_pipeline_conf() -> list[dict]:
+    return [
+        {
+            "class": "Impute",
+            "params": {
+                "method": "most_frequent",
+            },
+        },
+        {
+            "class": "Encode",
+            "params": {
+                "method": "most_frequent",
+            },
+        },
+        {
+            "class": "ConvertDatetime",
+            "params": {
+                "method": "to_timestamp",
+            },
+        },
+    ]
+
+
+def get_default_label_pipeline_clf() -> list[dict]:
+    return [
+        {
+            "class": "Encode",
+            "params": {"method": "most_frequent"},
+        },
+        {
+            "class": "Discretize",
+            "params": {"method": "quantile", "n_bins": 4},
+        },
+    ]
+
+
+def get_default_label_pipeline_reg() -> list[dict]:
+    return [
+        {
+            "class": "Encode",
+            "params": {"method": "most_frequent"},
+        },
+    ]
 
 
 @dataclass
@@ -44,6 +90,7 @@ class DatasetConfig:
         ...     openml_task_id=7592
         ... )
     """
+
     dataset_name: str = "default"
     data_source: Literal["disk", "openml", "uci", "automm"] | None = None
     openml_task_id: int | None = None
@@ -55,11 +102,6 @@ class DatasetConfig:
     file_type: Literal["csv", "parquet"] | None = None
     label_col: str | None = None
     split_file_path: str | None = None
-
-    def to_dict(self) -> dict:
-        """Convert to dictionary (for backward compatibility)."""
-        from dataclasses import asdict
-        return asdict(self)
 
 
 @dataclass
@@ -118,8 +160,9 @@ class TableProcessorConfig:
         ...     random_state=42
         ... )
     """
+
     # Preprocessing pipeline
-    pipeline: list[dict] | None = None
+    pipeline: list[dict] = field(default_factory=get_default_pipeline_conf)
 
     # Task configuration
     task_kind: Literal["classification", "regression"] = "classification"
@@ -142,8 +185,3 @@ class TableProcessorConfig:
     sample_n_rows: int | float | None = None
     label_pipeline: list[dict] | None = None
     label_stratify_pipeline: list[dict] | None = None
-
-    def to_dict(self) -> dict:
-        """Convert to dictionary (for backward compatibility)."""
-        from dataclasses import asdict
-        return asdict(self)

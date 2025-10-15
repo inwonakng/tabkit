@@ -2,6 +2,8 @@
 Tests for configuration dataclasses and backward compatibility.
 """
 
+from dataclasses import asdict
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -42,14 +44,14 @@ class TestDatasetConfig:
         assert config.file_type == "csv"
         assert config.label_col == "target"
 
-    def test_to_dict(self):
-        """Test conversion to dictionary."""
+    def test_asdict_conversion(self):
+        """Test conversion to dictionary using asdict."""
         config = DatasetConfig(
             dataset_name="test",
             data_source="openml",
             openml_task_id=123,
         )
-        config_dict = config.to_dict()
+        config_dict = asdict(config)
 
         assert isinstance(config_dict, dict)
         assert config_dict["dataset_name"] == "test"
@@ -116,15 +118,15 @@ class TestTableProcessorConfig:
         assert config.pipeline == pipeline
         assert len(config.pipeline) == 3
 
-    def test_to_dict(self):
-        """Test conversion to dictionary."""
+    def test_asdict_conversion(self):
+        """Test conversion to dictionary using asdict."""
         config = TableProcessorConfig(
             test_ratio=0.3,
             val_ratio=0.1,
             task_kind="regression",
             random_state=42,
         )
-        config_dict = config.to_dict()
+        config_dict = asdict(config)
 
         assert isinstance(config_dict, dict)
         assert config_dict["test_ratio"] == 0.3

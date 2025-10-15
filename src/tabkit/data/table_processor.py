@@ -14,99 +14,14 @@ from tabkit.config import DATA_DIR
 from tabkit.utils import setup_logger
 
 from .column_metadata import ColumnMetadata, is_column_categorical
+from .data_config import (
+    DatasetConfig,
+    TableProcessorConfig,
+    get_default_label_pipeline_clf,
+    get_default_label_pipeline_reg,
+)
 from .transforms import TRANSFORM_MAP, BaseTransform
 from .utils import load_from_disk, load_openml_dataset, load_uci_dataset
-
-"""
-Default configuration values
-"""
-
-DEFAULT_PIPELINE = [
-    {
-        "class": "Impute",
-        "params": {
-            "method": "most_frequent",
-        },
-    },
-    {
-        "class": "Encode",
-        "params": {
-            "method": "most_frequent",
-        },
-    },
-    {
-        "class": "ConvertDatetime",
-        "params": {
-            "method": "to_timestamp",
-        },
-    },
-]
-
-DEFAULT_LABEL_PIPELINE_REG = [
-    {
-        "class": "Encode",
-        "params": {"method": "most_frequent"},
-    },
-]
-
-DEFAULT_LABEL_PIPELINE_CLF = [
-    {
-        "class": "Encode",
-        "params": {"method": "most_frequent"},
-    },
-    {
-        "class": "Discretize",
-        "params": {"method": "quantile", "n_bins": 4},
-    },
-]
-
-DEFAULT_DATASET_CONFIG = {
-    "dataset_name": "default",
-    "data_source": None,
-    "openml_task_id": None,
-    "openml_dataset_id": None,
-    "openml_split_idx": None,
-    "uci_dataset_id": None,
-    "automm_dataset_id": None,
-    "file_path": None,
-    "file_type": None,
-    "label_col": None,
-    "split_file_path": None,
-}
-
-DEFAULT_TABLE_PROCESSOR_CONFIG = {
-    "pipeline": DEFAULT_PIPELINE,
-    "task_kind": "classification",
-    # Ratio-based splitting (if set, takes precedence over K-fold)
-    "test_ratio": None,
-    "val_ratio": None,
-    # K-fold splitting (used if test_ratio/val_ratio are None)
-    "n_splits": 10,
-    "split_idx": 0,
-    "n_val_splits": 9,
-    "val_split_idx": 0,
-    "split_validation": True,
-    # Other options
-    "random_state": 0,
-    "exclude_columns": None,
-    "exclude_labels": None,
-    "sample_n_rows": None,
-    "label_pipeline": None,
-    "label_stratify_pipeline": None,
-}
-
-
-def merge_config_with_defaults(user_config: dict, defaults: dict) -> dict:
-    """
-    Merge user-provided config with default values.
-    User values override defaults. Performs shallow merge.
-    """
-    result = defaults.copy()
-    if user_config:
-        result.update(
-            {k: v for k, v in user_config.items() if v is not None and k in defaults}
-        )
-    return result
 
 
 def compute_config_hash(config_dict: dict, truncate: int = 16) -> str:
@@ -197,44 +112,44 @@ class TableProcessor:
         config: dict | Any | None = None,
         verbose: bool = False,
     ):
-        # Simple backward compatibility: convert config objects to dicts
-        if not isinstance(dataset_config, dict):
-            if hasattr(dataset_config, "to_dict"):
-                dataset_config = dataset_config.to_dict()
-            else:
-                dataset_config = asdict(dataset_config)
+        # Convert input to dataclass instance (applies defaults), then to dict
+        if isinstance(dataset_config, dict):
+            dataset_cfg_obj = DatasetConfig(**dataset_config)
+        else:
+            dataset_cfg_obj = dataset_config
+        self.dataset_config = asdict(dataset_cfg_obj)
 
-        if config is not None and not isinstance(config, dict):
-            if hasattr(config, "to_dict"):
-                config = config.to_dict()
-            else:
-                config = asdict(config)
-
-        # Merge with defaults
-        self.dataset_config = merge_config_with_defaults(
-            dataset_config, DEFAULT_DATASET_CONFIG
-        )
-        self.config = merge_config_with_defaults(
-            config or {}, DEFAULT_TABLE_PROCESSOR_CONFIG
-        )
+        if config is None:
+            config_obj = TableProcessorConfig()
+        elif isinstance(config, dict):
+            config_obj = TableProcessorConfig(**config)
+        else:
+            config_obj = config
+        self.config = asdict(config_obj)
 
         # Handle conditional defaults based on task_kind
         if self.config["label_pipeline"] is None:
             if self.config["task_kind"] == "classification":
-                self.config["label_pipeline"] = DEFAULT_LABEL_PIPELINE_CLF
+                self.config["label_pipeline"] = get_default_label_pipeline_clf()
             else:
-                self.config["label_pipeline"] = DEFAULT_LABEL_PIPELINE_REG
+                self.config["label_pipeline"] = get_default_label_pipeline_reg()
 
+        # Default stratification pipeline for classification if not provided
         if self.config["label_stratify_pipeline"] is None:
-            self.config["label_stratify_pipeline"] = DEFAULT_LABEL_PIPELINE_REG
+            if self.config["task_kind"] == "classification":
+                self.config["label_stratify_pipeline"] = (
+                    get_default_label_pipeline_clf()
+                )
+            else:
+                self.config["label_stratify_pipeline"] = (
+                    get_default_label_pipeline_reg()
+                )
 
         # Extract dataset name
-        self.dataset_name = self.dataset_config.get("dataset_name", "default")
+        self.dataset_name = self.dataset_config["dataset_name"]
 
         # Compute cache directory using hash
-        # dataset_name = self.dataset_config.get("dataset_name", "dataset")
         dataset_hash = compute_config_hash(self.dataset_config)
-        # config_name = self.config.get("config_name", "default")
         config_hash = compute_config_hash(self.config)
 
         self.save_dir = DATA_DIR / "data" / dataset_hash / config_hash
