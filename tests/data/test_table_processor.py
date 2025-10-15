@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tabkit.data.table_processor import TableProcessor
+from tabkit import TableProcessor
 from tabkit.data.transforms import BaseTransform
 
 

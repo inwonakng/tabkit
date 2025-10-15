@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tabkit.data import DatasetConfig, TableProcessor, TableProcessorConfig
+from tabkit import DatasetConfig, TableProcessor, TableProcessorConfig
 
 
 @pytest.fixture

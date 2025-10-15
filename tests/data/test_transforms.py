@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import pytest
 from tabkit.data.transforms import Impute, Scale, Discretize, Encode, ConvertDatetime
-from tabkit.data.column_metadata import ColumnMetadata
+from tabkit.data import ColumnMetadata
 
 @pytest.fixture
 def sample_df():
