@@ -1516,7 +1516,7 @@ packages:
 - pypi: ./
   name: table-toolkit
   version: 0.1.1
-  sha256: dcceb1be2d5ba6722ef2b2e098505a94193bc1686327a0df71783a0182e84828
+  sha256: 610fa7b54d01a06f3f42fa60f4c8b3160c8eae5287c1e689ab47e2f99a172e4d
   requires_dist:
   - numpy>=2.2.6,<3
   - pandas>=2.3.2,<3

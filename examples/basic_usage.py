@@ -2,12 +2,14 @@
 Basic Usage Examples for tabkit
 
 This script demonstrates common usage patterns for the tabkit library.
+Uses type-safe config classes for better IDE support and documentation.
+Plain dictionaries also work if you prefer that style.
 """
 
 import numpy as np
 import pandas as pd
 
-from tabkit import TableProcessor
+from tabkit import DatasetConfig, TableProcessor, TableProcessorConfig
 
 
 def example_1_basic_usage():
@@ -30,20 +32,20 @@ def example_1_basic_usage():
     # Save to CSV (in real use, you'd already have this file)
     data.to_csv("/tmp/example_data.csv", index=False)
 
-    # Define configs as plain dicts
-    dataset_config = {
-        "dataset_name": "customer_data",
-        "data_source": "disk",
-        "file_path": "/tmp/example_data.csv",
-        "file_type": "csv",
-        "label_col": "purchased",
-    }
+    # Define configs using type-safe config classes
+    dataset_config = DatasetConfig(
+        dataset_name="customer_data",
+        data_source="disk",
+        file_path="/tmp/example_data.csv",
+        file_type="csv",
+        label_col="purchased",
+    )
 
-    processor_config = {
-        "task_kind": "classification",
-        "n_splits": 5,
-        "random_state": 42,
-    }
+    processor_config = TableProcessorConfig(
+        task_kind="classification",
+        n_splits=5,
+        random_state=42,
+    )
 
     # Create and prepare processor
     processor = TableProcessor(dataset_config=dataset_config, config=processor_config)
@@ -81,13 +83,13 @@ def example_2_custom_pipeline():
 
     data.to_csv("/tmp/regression_data.csv", index=False)
 
-    dataset_config = {
-        "dataset_name": "regression_example",
-        "data_source": "disk",
-        "file_path": "/tmp/regression_data.csv",
-        "file_type": "csv",
-        "label_col": "target",
-    }
+    dataset_config = DatasetConfig(
+        dataset_name="regression_example",
+        data_source="disk",
+        file_path="/tmp/regression_data.csv",
+        file_type="csv",
+        label_col="target",
+    )
 
     # Custom preprocessing pipeline
     custom_pipeline = [
@@ -96,12 +98,12 @@ def example_2_custom_pipeline():
         {"class": "Scale", "params": {"method": "standard"}},  # Standardize features
     ]
 
-    processor_config = {
-        "task_kind": "regression",
-        "pipeline": custom_pipeline,
-        "n_splits": 3,
-        "random_state": 123,
-    }
+    processor_config = TableProcessorConfig(
+        task_kind="regression",
+        pipeline=custom_pipeline,
+        n_splits=3,
+        random_state=123,
+    )
 
     processor = TableProcessor(dataset_config=dataset_config, config=processor_config)
 
@@ -135,33 +137,33 @@ def example_3_advanced_config():
 
     data.to_csv("/tmp/multiclass_data.csv", index=False)
 
-    dataset_config = {
-        "dataset_name": "multiclass_example",
-        "data_source": "disk",
-        "file_path": "/tmp/multiclass_data.csv",
-        "file_type": "csv",
-        "label_col": "target",
-    }
+    dataset_config = DatasetConfig(
+        dataset_name="multiclass_example",
+        data_source="disk",
+        file_path="/tmp/multiclass_data.csv",
+        file_type="csv",
+        label_col="target",
+    )
 
-    processor_config = {
-        "task_kind": "classification",
-        "n_splits": 5,
-        "split_idx": 0,  # Use first fold
-        "n_val_splits": 4,
-        "random_state": 42,
-        "exclude_columns": ["exclude_me"],  # Exclude specific columns
-        "pipeline": [
+    processor_config = TableProcessorConfig(
+        task_kind="classification",
+        n_splits=5,
+        split_idx=0,  # Use first fold
+        n_val_splits=4,
+        random_state=42,
+        exclude_columns=["exclude_me"],  # Exclude specific columns
+        pipeline=[
             {"class": "Impute", "params": {"method": "most_frequent"}},
             {"class": "ConvertDatetime", "params": {"method": "to_timestamp"}},
             {"class": "Encode", "params": {"method": "most_frequent"}},
         ],
-    }
+    )
 
     processor = TableProcessor(dataset_config=dataset_config, config=processor_config)
 
     processor.prepare()
 
-    print(f"Excluded columns: {processor_config['exclude_columns']}")
+    print(f"Excluded columns: {processor_config.exclude_columns}")
     print(f"Remaining columns: {processor.col_names}")
     print(f"Number of classes: {processor.label_info.mapping}")
 
@@ -171,9 +173,9 @@ def example_3_advanced_config():
 
 
 def example_4_minimal_config():
-    """Example 4: Minimal config using all defaults"""
+    """Example 4: Using plain dictionaries (also supported)"""
     print("\n" + "=" * 60)
-    print("Example 4: Minimal Configuration (Using Defaults)")
+    print("Example 4: Plain Dictionaries (Alternative Style)")
     print("=" * 60)
 
     # Create simple data
@@ -187,28 +189,31 @@ def example_4_minimal_config():
 
     data.to_csv("/tmp/minimal_data.csv", index=False)
 
-    # Minimal config - only required fields
+    # You can also use plain dictionaries if you prefer
     dataset_config = {
-        "dataset_name": "minimal_example",
+        "dataset_name": "dict_example",
         "data_source": "disk",
         "file_path": "/tmp/minimal_data.csv",
         "file_type": "csv",
         "label_col": "y",
     }
 
-    # Use all default processor settings
+    processor_config = {
+        "task_kind": "classification",
+        "test_ratio": 0.2,
+        "val_ratio": 0.1,
+    }
+
     processor = TableProcessor(
         dataset_config=dataset_config,
-        config=None,  # Uses all defaults
+        config=processor_config,
     )
 
     processor.prepare()
 
     X_train, y_train = processor.get_split("train")
-    print(f"Using defaults, got train shape: {X_train.shape}")
-    print(f"Default task_kind: classification")
-    print(f"Default n_splits: 10")
-    print(f"Default pipeline: Impute -> Encode -> ConvertDatetime")
+    print(f"Using dict configs, got train shape: {X_train.shape}")
+    print(f"Dictionaries work identically to config classes!")
 
 
 def example_5_accessing_raw_data():
@@ -223,14 +228,15 @@ def example_5_accessing_raw_data():
 
     data.to_csv("/tmp/access_data.csv", index=False)
 
-    dataset_config = {
-        "dataset_name": "access_example",
-        "data_source": "disk",
-        "file_path": "/tmp/access_data.csv",
-        "file_type": "csv",
-        "label_col": "target",
-    }
+    dataset_config = DatasetConfig(
+        dataset_name="access_example",
+        data_source="disk",
+        file_path="/tmp/access_data.csv",
+        file_type="csv",
+        label_col="target",
+    )
 
+    # Config is optional - uses defaults if not provided
     processor = TableProcessor(dataset_config=dataset_config)
     processor.prepare()
 

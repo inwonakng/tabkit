@@ -6,6 +6,14 @@ split/sampling and more in a configuration-driven manner. I made this toolkit be
 
 ## Installation
 
+Stable release via PyPI:
+
+```bash
+pip install table-toolkit
+```
+
+Or install the latest development version directly from GitHub:
+
 ```bash
 pip install git+https://github.com/inwonakng/tabkit.git@main
 ```
@@ -15,22 +23,22 @@ This package has been tested only with Python 3.10 and above.
 ## Quick Start
 
 ```python
-from tabkit import TableProcessor
+from tabkit import TableProcessor, DatasetConfig, TableProcessorConfig
 
-# Define your dataset and processing configs as plain dicts
-dataset_config = {
-    "dataset_name": "my_dataset",
-    "data_source": "disk",
-    "file_path": "path/to/your/data.csv",
-    "file_type": "csv",
-    "label_col": "target"
-}
+# Define your dataset and processing configs
+dataset_config = DatasetConfig(
+    dataset_name="my_dataset",
+    data_source="disk",
+    file_path="path/to/your/data.csv",
+    file_type="csv",
+    label_col="target"
+)
 
-processor_config = {
-    "task_kind": "classification",  # or "regression"
-    "n_splits": 5,
-    "random_state": 42
-}
+processor_config = TableProcessorConfig(
+    task_kind="classification",  # or "regression"
+    n_splits=5,
+    random_state=42
+)
 
 # Create processor
 processor = TableProcessor(
@@ -50,7 +58,9 @@ X_test, y_test = processor.get_split("test")
 df = processor.get("raw_df")
 ```
 
-For a complete example, see [examples/basic_usage.py](examples/basic_usage.py).
+**Note:** You can also use plain dictionaries instead of config classes - both work identically! See [Configuration Options](#configuration-options) below.
+
+For more examples, see [examples/basic_usage.py](examples/basic_usage.py).
 
 ## Features
 
@@ -62,35 +72,57 @@ For a complete example, see [examples/basic_usage.py](examples/basic_usage.py).
 
 ## Configuration Options
 
-All configuration is done via plain Python dictionaries. See defaults in `src/tabkit/data/table_processor.py`.
+Tabkit provides **type-safe configuration classes** with IDE autocomplete and inline documentation. You can also use plain dictionaries if you prefer - both approaches work identically.
 
-### Dataset Config
+### Using Config Classes (Recommended)
+
 ```python
-{
-    "dataset_name": str,       # Name for your dataset
-    "data_source": str,        # "disk", "openml", "uci"
-    "file_path": str,          # Path to your data file (for disk source)
-    "file_type": str,          # "csv" or "parquet" (for disk source)
-    "label_col": str,          # Name of the target column
-    # ... see DEFAULT_DATASET_CONFIG for all options
-}
+from tabkit import DatasetConfig, TableProcessorConfig
+
+# Dataset configuration with type hints and autocomplete
+dataset_config = DatasetConfig(
+    dataset_name="my_dataset",
+    data_source="disk",      # "disk", "openml", "uci", "automm"
+    file_path="data.csv",
+    file_type="csv",         # "csv" or "parquet"
+    label_col="target"
+)
+
+# Processor configuration
+processor_config = TableProcessorConfig(
+    task_kind="classification",  # or "regression"
+    random_state=42,
+    pipeline=[...],              # Custom pipeline (optional)
+    exclude_columns=["id"],      # Columns to exclude (optional)
+
+    # Splitting configuration - see next section
+    test_ratio=0.2,              # For ratio-based splitting
+    val_ratio=0.1,               # For ratio-based splitting
+    # OR
+    n_splits=10,                 # For K-fold splitting
+    split_idx=0                  # For K-fold splitting
+)
 ```
 
-### Processor Config
-```python
-{
-    "task_kind": str,          # "classification" or "regression"
-    "random_state": int,       # Random seed (default: 0)
-    "pipeline": list,          # Preprocessing pipeline (uses defaults if None)
-    "exclude_columns": list,   # Column names to exclude
-    "exclude_labels": list,    # Label values to exclude
+For detailed documentation on all available options, see the docstrings in `DatasetConfig` and `TableProcessorConfig`, or check the [config source](src/tabkit/data/data_config.py).
 
-    # Splitting configuration - see next section for details
-    "test_ratio": float,       # e.g., 0.2 for 20% test (ratio mode)
-    "val_ratio": float,        # e.g., 0.1 for 10% validation (ratio mode)
-    "n_splits": int,           # Number of folds (K-fold mode, default: 10)
-    "split_idx": int,          # Which fold for test (K-fold mode)
-    # ... see DEFAULT_TABLE_PROCESSOR_CONFIG for all options
+### Using Plain Dictionaries (Also supported)
+
+```python
+# Same functionality, dictionary-based
+dataset_config = {
+    "dataset_name": "my_dataset",
+    "data_source": "disk",
+    "file_path": "data.csv",
+    "file_type": "csv",
+    "label_col": "target"
+}
+
+processor_config = {
+    "task_kind": "classification",
+    "test_ratio": 0.2,
+    "val_ratio": 0.1,
+    "random_state": 42
 }
 ```
 
@@ -112,11 +144,13 @@ Tabkit supports two distinct approaches for splitting your data into train/valid
 
 **Example:**
 ```python
-config = {
-    "test_ratio": 0.2,    # 20% test
-    "val_ratio": 0.1,     # 10% validation
-    "random_state": 42    # 70% training
-}
+from tabkit import TableProcessorConfig
+
+config = TableProcessorConfig(
+    test_ratio=0.2,       # 20% test
+    val_ratio=0.1,        # 10% validation
+    random_state=42       # 70% training
+)
 ```
 
 ### Mode 2: K-Fold Based Splitting (Robust & Reproducible)
@@ -134,11 +168,13 @@ config = {
 
 **Example:**
 ```python
+from tabkit import TableProcessorConfig
+
 # Run 1: Use fold 0 as test
-config = {"n_splits": 5, "split_idx": 0}  # 20% test, rest train+val
+config = TableProcessorConfig(n_splits=5, split_idx=0)  # 20% test, rest train+val
 
 # Run 2: Use fold 1 as test
-config = {"n_splits": 5, "split_idx": 1}  # Different 20% test
+config = TableProcessorConfig(n_splits=5, split_idx=1)  # Different 20% test
 
 # ... Run 3-5 to cover all data in test set
 ```

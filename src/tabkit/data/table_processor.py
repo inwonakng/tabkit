@@ -131,88 +131,44 @@ class TableProcessor:
     hash for reproducibility and performance.
 
     Args:
-        dataset_config: Configuration for data loading. Can be a dict or config object.
-        config: Configuration for preprocessing and splitting. Can be a dict or config object.
+        dataset_config: Configuration for data loading. Use DatasetConfig class or dict.
+        config: Configuration for preprocessing and splitting. Use TableProcessorConfig class or dict.
         verbose: Whether to print logging information.
 
-    Dataset Configuration Options:
-        dataset_name (str): Name for your dataset
-        data_source (str): Source type - "disk", "openml", "uci", "automm"
-        file_path (str): Path to data file (required for "disk" source)
-        file_type (str): "csv" or "parquet" (required for "disk" source)
-        label_col (str): Name of the target column
-        openml_task_id (int): OpenML task ID (for "openml" source)
-        openml_dataset_id (int): OpenML dataset ID (for "openml" source)
-        split_file_path (str): Path to predefined split indices
-
-    Processor Configuration Options:
-        task_kind (str): "classification" or "regression" (default: "classification")
-        random_state (int): Random seed for reproducibility (default: 0)
-
-        pipeline (list[dict]): Preprocessing pipeline steps. Each step is a dict with:
-            - "class": Transform class name (e.g., "Impute", "Encode", "Scale")
-            - "params": Dict of parameters for the transform
-            Default: [Impute, Encode, ConvertDatetime]
-
-        label_pipeline (list[dict]): Pipeline for label preprocessing (default: based on task_kind)
-        label_stratify_pipeline (list[dict]): Pipeline for creating stratification target
-
-        exclude_columns (list[str]): Column names to exclude from features
-        exclude_labels (list[str]): Label values to filter out (classification only)
-        sample_n_rows (int|float): Subsample training data (int for count, float for fraction)
-
-        --- SPLITTING CONFIGURATION ---
-
-        Two splitting modes are supported. Priority: if both test_ratio and val_ratio
-        are set, ratio-based splitting is used. Otherwise, K-fold splitting is used.
-
-        MODE 1: Ratio-Based Splitting (Quick & Simple)
-            Use when: You want simple percentage splits for quick experiments
-
-            test_ratio (float): Fraction for test set (e.g., 0.2 = 20%)
-            val_ratio (float): Fraction for validation set (e.g., 0.1 = 10%)
-
-            Example: {"test_ratio": 0.2, "val_ratio": 0.1} → 70/10/20 split
-
-            Characteristics:
-            - Single random split based on percentages
-            - Fast and intuitive
-            - No systematic dataset coverage across runs
-
-        MODE 2: K-Fold Based Splitting (Robust & Reproducible)
-            Use when: You need cross-validation or full dataset coverage
-
-            n_splits (int): Number of folds for train/test split (default: 10)
-            split_idx (int): Which fold to use as test set (0 to n_splits-1)
-            n_val_splits (int): Number of folds for train/val split (default: 9)
-            val_split_idx (int): Which fold to use as validation (0 to n_val_splits-1)
-            split_validation (bool): Whether to split training data into train/val
-
-            Example: {"n_splits": 5, "split_idx": 0} → Use fold 0 as test (20%)
-
-            Characteristics:
-            - By varying split_idx from 0 to n_splits-1, every sample appears
-              in the test set exactly once across all runs
-            - Enables comprehensive model evaluation and benchmarking
-            - Systematic coverage of entire dataset
+    Configuration:
+        For detailed configuration options, see the DatasetConfig and TableProcessorConfig
+        classes in `tabkit.data`. Both type-safe config classes and plain dictionaries
+        are supported and work identically.
 
     Example:
-        >>> # Ratio-based splitting
+        >>> from tabkit import TableProcessor, DatasetConfig, TableProcessorConfig
+        >>>
+        >>> # Using config classes (recommended - provides type hints and autocomplete)
+        >>> dataset_cfg = DatasetConfig(
+        ...     data_source="disk",
+        ...     file_path="data.csv",
+        ...     file_type="csv",
+        ...     label_col="target"
+        ... )
+        >>> processor_cfg = TableProcessorConfig(
+        ...     task_kind="classification",
+        ...     test_ratio=0.2,
+        ...     val_ratio=0.1
+        ... )
+        >>> processor = TableProcessor(dataset_config=dataset_cfg, config=processor_cfg)
+        >>>
+        >>> # Or using plain dictionaries (also supported)
         >>> processor = TableProcessor(
-        ...     dataset_config={"data_source": "disk", "file_path": "data.csv",
-        ...                     "label_col": "target", "dataset_name": "my_data"},
+        ...     dataset_config={"data_source": "disk", "file_path": "data.csv", "label_col": "target"},
         ...     config={"test_ratio": 0.2, "val_ratio": 0.1}
         ... )
+        >>>
+        >>> # Prepare data (caches for future runs)
         >>> processor.prepare()
+        >>>
+        >>> # Get splits
         >>> X_train, y_train = processor.get_split("train")
-
-        >>> # K-fold splitting
-        >>> processor = TableProcessor(
-        ...     dataset_config={"data_source": "disk", "file_path": "data.csv",
-        ...                     "label_col": "target", "dataset_name": "my_data"},
-        ...     config={"n_splits": 5, "split_idx": 0}
-        ... )
-        >>> processor.prepare()
+        >>> X_val, y_val = processor.get_split("val")
         >>> X_test, y_test = processor.get_split("test")
 
     Attributes:

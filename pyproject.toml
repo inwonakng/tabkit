@@ -1,6 +1,6 @@
 [project]
 name = "table-toolkit"
-version = "0.1.1"
+version = "0.1.2"
 description = "A Python library for consistent preprocessing of tabular data with automatic type inference, caching, and stratified splitting"
 readme = "README.md"
 requires-python = ">= 3.10"
@@ -58,6 +58,8 @@ table-toolkit = { path = ".", editable = true, extras = ["dev"] }
 
 [tool.pixi.tasks]
 test = "OPENML_API_KEY=test OPENML_CACHE_DIR=/tmp/tabkit_pytest_cache pytest"
+build = "python -m build"
+publish = "twine upload dist/*"
 
 
 [tool.pixi.dependencies]
