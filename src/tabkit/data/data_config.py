@@ -68,7 +68,7 @@ class DatasetConfig:
         label_col: Name of the target/label column
         openml_task_id: OpenML task ID (for data_source="openml")
         openml_dataset_id: OpenML dataset ID (for data_source="openml")
-        openml_split_idx: Which OpenML split to use (for data_source="openml")
+        openml_fold_idx: Which OpenML split to use (for data_source="openml")
         uci_dataset_id: UCI dataset identifier (for data_source="uci")
         automm_dataset_id: AutoMM dataset identifier (for data_source="automm")
         split_file_path: Path to predefined train/test split indices
@@ -95,7 +95,7 @@ class DatasetConfig:
     data_source: Literal["disk", "openml", "uci", "automm"] | None = None
     openml_task_id: int | None = None
     openml_dataset_id: int | None = None
-    openml_split_idx: int | None = None
+    openml_fold_idx: int | None = None
     uci_dataset_id: str | None = None
     automm_dataset_id: str | None = None
     file_path: str | None = None
@@ -126,9 +126,9 @@ class TableProcessorConfig:
 
         MODE 2: K-Fold Splitting (Robust)
             n_splits: Number of folds for train/test split
-            split_idx: Which fold to use as test (0 to n_splits-1)
+            fold_idx: Which fold to use as test (0 to n_splits-1)
             n_val_splits: Number of folds for train/val split
-            val_split_idx: Which fold to use as validation
+            val_fold_idx: Which fold to use as validation
             split_validation: Whether to create train/val split
 
         --- Other Options ---
@@ -156,7 +156,7 @@ class TableProcessorConfig:
         >>> config = TableProcessorConfig(
         ...     task_kind="regression",
         ...     n_splits=5,
-        ...     split_idx=0,
+        ...     fold_idx=0,
         ...     random_state=42
         ... )
     """
@@ -173,9 +173,9 @@ class TableProcessorConfig:
 
     # K-fold splitting
     n_splits: int = 10
-    split_idx: int = 0
+    fold_idx: int = 0
     n_val_splits: int = 9
-    val_split_idx: int = 0
+    val_fold_idx: int = 0
     split_validation: bool = True
 
     # Other options

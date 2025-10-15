@@ -70,7 +70,7 @@ def test_prepare_pipeline_execution(processor, sample_data, mocker):
     mock_transform_instance = MockTransform()
 
     def mock_instantiate_pipeline(config_list):
-        if config_list == processor.config["pipeline"]:
+        if config_list == processor.config.pipeline:
             return [mock_transform_instance]
         return []
 
@@ -136,8 +136,8 @@ def test_stratified_split_fallback(processor, mocker):
         return_value=mock_stratified_kfold_instance,
     )
 
-    processor.config["n_splits"] = 2
-    processor.config["n_val_splits"] = 2
+    processor.config.n_splits = 2
+    processor.config.n_val_splits = 2
     processor.prepare()
 
     # Check that KFold was used as a fallback, and StratifiedKFold was not.
@@ -154,7 +154,7 @@ def test_classification_with_float_label_discretizes(processor, mocker):
     mocker.patch.object(processor, "_load_data", return_value=(X, y, None, None))
 
     # Configure for classification but provide no explicit label pipeline
-    processor.config["task_kind"] = "classification"
+    processor.config.task_kind = "classification"
     processor.prepare()
 
     _, y_processed = processor.get_split("train")
@@ -232,7 +232,7 @@ def test_ratio_mode_takes_precedence(dataset_config, sample_data, mocker, tmp_pa
         "test_ratio": 0.3,   # Ratio mode
         "val_ratio": 0.2,    # Ratio mode
         "n_splits": 5,       # K-fold mode (should be ignored)
-        "split_idx": 0,      # K-fold mode (should be ignored)
+        "fold_idx": 0,      # K-fold mode (should be ignored)
         "random_state": 42
     }
 

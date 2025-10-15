@@ -63,11 +63,11 @@ class TestDatasetConfig:
         config = DatasetConfig(
             data_source="openml",
             openml_task_id=3917,
-            openml_split_idx=0,
+            openml_fold_idx=0,
         )
         assert config.data_source == "openml"
         assert config.openml_task_id == 3917
-        assert config.openml_split_idx == 0
+        assert config.openml_fold_idx == 0
 
 
 class TestTableProcessorConfig:
@@ -80,7 +80,7 @@ class TestTableProcessorConfig:
         assert config.test_ratio is None
         assert config.val_ratio is None
         assert config.n_splits == 10
-        assert config.split_idx == 0
+        assert config.fold_idx == 0
         assert config.random_state == 0
 
     def test_ratio_mode_config(self):
@@ -98,14 +98,14 @@ class TestTableProcessorConfig:
         """Test K-fold splitting configuration."""
         config = TableProcessorConfig(
             n_splits=5,
-            split_idx=2,
+            fold_idx=2,
             n_val_splits=4,
-            val_split_idx=1,
+            val_fold_idx=1,
         )
         assert config.n_splits == 5
-        assert config.split_idx == 2
+        assert config.fold_idx == 2
         assert config.n_val_splits == 4
-        assert config.val_split_idx == 1
+        assert config.val_fold_idx == 1
 
     def test_custom_pipeline(self):
         """Test custom pipeline configuration."""
@@ -293,7 +293,7 @@ class TestDataclassModification:
         # Should work without errors
         processor.prepare()
         assert processor.is_cached
-        assert processor.config["random_state"] == 999
+        assert processor.config.random_state == 999
 
 
 class TestConfigValidation:
@@ -312,7 +312,7 @@ class TestConfigValidation:
 
         processor.prepare()
         # Should use default K-fold splitting
-        assert processor.config["n_splits"] == 10
+        assert processor.config.n_splits == 10
 
     def test_empty_dict_config_uses_defaults(self, sample_data, mocker, tmp_path):
         """Test that empty dict uses default values."""
@@ -326,5 +326,5 @@ class TestConfigValidation:
         mocker.patch.object(processor, "_load_data", return_value=(X, y, None, None))
 
         processor.prepare()
-        assert processor.config["n_splits"] == 10
-        assert processor.config["task_kind"] == "classification"
+        assert processor.config.n_splits == 10
+        assert processor.config.task_kind == "classification"

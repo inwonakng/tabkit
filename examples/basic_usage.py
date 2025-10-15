@@ -148,7 +148,7 @@ def example_3_advanced_config():
     processor_config = TableProcessorConfig(
         task_kind="classification",
         n_splits=5,
-        split_idx=0,  # Use first fold
+        fold_idx=0,  # Use first fold
         n_val_splits=4,
         random_state=42,
         exclude_columns=["exclude_me"],  # Exclude specific columns

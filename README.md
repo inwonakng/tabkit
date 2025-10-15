@@ -100,7 +100,7 @@ processor_config = TableProcessorConfig(
     val_ratio=0.1,               # For ratio-based splitting
     # OR
     n_splits=10,                 # For K-fold splitting
-    split_idx=0                  # For K-fold splitting
+    fold_idx=0                  # For K-fold splitting
 )
 ```
 
@@ -162,7 +162,7 @@ config = TableProcessorConfig(
 
 **How it works:**
 - Uses K-fold cross-validation for systematic data splitting
-- By varying `split_idx` from 0 to `n_splits-1`, every sample appears in the test set exactly once
+- By varying `fold_idx` from 0 to `n_splits-1`, every sample appears in the test set exactly once
 - Provides systematic coverage of your entire dataset
 - Default: 10 splits = 10% test, then 9 sub-splits on training portion = ~11% val, ~79% train
 
@@ -171,10 +171,10 @@ config = TableProcessorConfig(
 from tabkit import TableProcessorConfig
 
 # Run 1: Use fold 0 as test
-config = TableProcessorConfig(n_splits=5, split_idx=0)  # 20% test, rest train+val
+config = TableProcessorConfig(n_splits=5, fold_idx=0)  # 20% test, rest train+val
 
 # Run 2: Use fold 1 as test
-config = TableProcessorConfig(n_splits=5, split_idx=1)  # Different 20% test
+config = TableProcessorConfig(n_splits=5, fold_idx=1)  # Different 20% test
 
 # ... Run 3-5 to cover all data in test set
 ```
@@ -188,7 +188,7 @@ config = TableProcessorConfig(n_splits=5, split_idx=1)  # Different 20% test
 config = {"test_ratio": 0.2, "val_ratio": 0.1}
 
 # This uses K-FOLD mode
-config = {"n_splits": 10, "split_idx": 0}
+config = {"n_splits": 10, "fold_idx": 0}
 
 # This also uses K-FOLD mode (ratios are None by default)
 config = {}  # Uses all defaults
