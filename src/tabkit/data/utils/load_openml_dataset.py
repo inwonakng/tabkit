@@ -1,6 +1,36 @@
+import os
+
 import numpy as np
 import openml
 import pandas as pd
+
+
+def _ensure_openml_configured():
+    """Ensure OpenML is configured with required environment variables.
+
+    Raises:
+        ValueError: If required environment variables are not set.
+    """
+    # Only configure if not already set
+    if not openml.config.apikey:
+        openml_api_key = os.environ.get("OPENML_API_KEY")
+        if openml_api_key is None:
+            raise ValueError(
+                "OPENML_API_KEY not found in environment variables. "
+                "This is required to use OpenML datasets. "
+                "Set the environment variable or use a different data source."
+            )
+        openml.config.apikey = openml_api_key
+
+    if not openml.config.cache_directory:
+        openml_cache_dir = os.environ.get("OPENML_CACHE_DIR")
+        if openml_cache_dir is None:
+            raise ValueError(
+                "OPENML_CACHE_DIR not found in environment variables. "
+                "This is required to use OpenML datasets. "
+                "Set the environment variable or use a different data source."
+            )
+        openml.config.set_root_cache_directory(openml_cache_dir)
 
 
 def load_openml_dataset(
@@ -21,7 +51,7 @@ def load_openml_dataset(
         random_state: The random seed to use for reproducible train/test splits.
 
     Raises:
-        ValueError: If an unknown data type is encountered in the dataset.
+        ValueError: If required environment variables (OPENML_API_KEY, OPENML_CACHE_DIR) are not set.
 
     Returns:
         A tuple containing:
@@ -30,6 +60,8 @@ def load_openml_dataset(
         - np.ndarray: Indices for the training set.
         - np.ndarray: Indices for the test set.
     """
+    # Configure OpenML only when this function is actually called
+    _ensure_openml_configured()
 
     # if we have the task id, override dataset_id
     if task_id is not None:
