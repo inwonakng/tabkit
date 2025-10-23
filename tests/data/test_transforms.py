@@ -2,7 +2,7 @@
 import pandas as pd
 import numpy as np
 import pytest
-from tabkit.data.transforms import Impute, Scale, Discretize, Encode, ConvertDatetime
+from tabkit.data.transforms import Impute, Scale, Discretize, Encode, ConvertDatetime, Pipeline
 from tabkit.data import ColumnMetadata
 
 @pytest.fixture
@@ -372,3 +372,101 @@ class TestInverseTransforms:
         # Should approximately recover original (discretization loses info)
         assert inverse_scaled['numeric'].min() >= df['numeric'].min()
         assert inverse_scaled['numeric'].max() <= df['numeric'].max()
+
+
+class TestPipeline:
+    """Test the Pipeline class for managing transforms."""
+
+    def test_pipeline_creation_empty(self):
+        """Test creating an empty pipeline."""
+        pipeline = Pipeline()
+        assert len(pipeline) == 0
+        assert pipeline.names == []
+
+    def test_pipeline_creation_with_transforms(self):
+        """Test creating pipeline with initial transforms."""
+        transforms = [
+            Impute(method='mean'),
+            Scale(method='standard'),
+            Discretize(method='uniform', n_bins=5)
+        ]
+        pipeline = Pipeline(transforms)
+        assert len(pipeline) == 3
+        assert pipeline.names == ['Impute', 'Scale', 'Discretize']
+
+    def test_pipeline_add_transform(self):
+        """Test adding transforms to pipeline."""
+        pipeline = Pipeline()
+        pipeline.add(Impute(method='mean'))
+        pipeline.add(Scale(method='standard'))
+
+        assert len(pipeline) == 2
+        assert pipeline.names == ['Impute', 'Scale']
+
+    def test_pipeline_duplicate_names(self):
+        """Test that duplicate transform names get numbered."""
+        pipeline = Pipeline()
+        pipeline.add(Impute(method='mean'))
+        pipeline.add(Impute(method='median'))
+        pipeline.add(Impute(method='constant', fill_value=0))
+
+        assert len(pipeline) == 3
+        assert pipeline.names == ['Impute', 'Impute_2', 'Impute_3']
+        assert pipeline['Impute'].method == 'mean'
+        assert pipeline['Impute_2'].method == 'median'
+        assert pipeline['Impute_3'].method == 'constant'
+
+    def test_pipeline_class_level_names(self):
+        """Test that transforms have class-level name attributes."""
+        imputer = Impute(method='mean')
+        scaler = Scale(method='standard')
+        discretizer = Discretize(method='uniform', n_bins=5)
+
+        assert imputer.name == 'Impute'
+        assert scaler.name == 'Scale'
+        assert discretizer.name == 'Discretize'
+
+    def test_pipeline_access_by_name(self):
+        """Test accessing transforms by name."""
+        pipeline = Pipeline()
+        pipeline.add(Impute(method='mean'))
+        pipeline.add(Scale(method='standard'))
+
+        assert isinstance(pipeline['Impute'], Impute)
+        assert isinstance(pipeline['Scale'], Scale)
+        assert pipeline.get('Impute').method == 'mean'
+
+    def test_pipeline_access_by_index(self):
+        """Test accessing transforms by index."""
+        pipeline = Pipeline()
+        pipeline.add(Impute(method='mean'))
+        pipeline.add(Scale(method='standard'))
+
+        assert isinstance(pipeline[0], Impute)
+        assert isinstance(pipeline[1], Scale)
+        assert pipeline[0].method == 'mean'
+
+    def test_pipeline_iteration(self):
+        """Test iterating over pipeline transforms."""
+        transforms = [
+            Impute(method='mean'),
+            Scale(method='standard'),
+            Discretize(method='uniform', n_bins=5)
+        ]
+        pipeline = Pipeline(transforms)
+
+        transform_list = list(pipeline)
+        assert len(transform_list) == 3
+        assert all(isinstance(t, (Impute, Scale, Discretize)) for t in transform_list)
+
+    def test_pipeline_transforms_property(self):
+        """Test the transforms property for backward compatibility."""
+        transforms = [
+            Impute(method='mean'),
+            Scale(method='standard')
+        ]
+        pipeline = Pipeline(transforms)
+
+        assert isinstance(pipeline.transforms, list)
+        assert len(pipeline.transforms) == 2
+        assert pipeline.transforms[0] == pipeline[0]

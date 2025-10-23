@@ -10,9 +10,11 @@ from .column_metadata import ColumnMetadata
 from .compute_bins import compute_bins
 
 
-@dataclass
 class BaseTransform(ABC):
     """Abstract base class for all preprocessing transforms."""
+
+    # Class-level name attribute - should be set by subclasses
+    name: str = None
 
     def fit(
         self,
@@ -40,13 +42,108 @@ class BaseTransform(ABC):
         self.fit(X, **kwargs)
         return self.transform(X)
 
-    def to_dict(self) -> dict:
-        """Serialize the transform's configuration for hashing. assumes the name is registered"""
-        return {"class": self.__class__.__name__, "params": asdict(self)}
+class Pipeline:
+    """Container for transforms that supports both sequential iteration and name-based access."""
+
+    def __init__(self, transforms: list[BaseTransform] | None = None):
+        """Initialize pipeline with optional list of transforms.
+
+        Args:
+            transforms: List of transform instances. Names will be auto-assigned if not set.
+        """
+        self._transforms_list: list[BaseTransform] = []
+        self._transforms_dict: dict[str, BaseTransform] = {}
+        self._names_list: list[str] = []  # Parallel list to track names in order
+
+        if transforms:
+            for transform in transforms:
+                self.add(transform)
+
+    def add(self, transform: BaseTransform) -> str:
+        """Add a transform to the pipeline.
+
+        Args:
+            transform: Transform instance to add
+
+        Returns:
+            The assigned unique name for the transform
+        """
+        # Use the class-level name attribute, fallback to class name
+        base_name = transform.name if transform.name is not None else transform.__class__.__name__
+        unique_name = self._make_unique_name(base_name)
+
+        self._transforms_list.append(transform)
+        self._transforms_dict[unique_name] = transform
+        self._names_list.append(unique_name)
+        return unique_name
+
+    def _make_unique_name(self, base_name: str) -> str:
+        """Generate a unique name by appending numbers if needed.
+
+        Args:
+            base_name: The base name to make unique
+
+        Returns:
+            A unique name not in the current dict
+        """
+        if base_name not in self._transforms_dict:
+            return base_name
+
+        counter = 2
+        while f"{base_name}_{counter}" in self._transforms_dict:
+            counter += 1
+        return f"{base_name}_{counter}"
+
+    def get(self, name: str) -> BaseTransform:
+        """Get a transform by name.
+
+        Args:
+            name: Name of the transform
+
+        Returns:
+            The transform instance
+
+        Raises:
+            KeyError: If name not found
+        """
+        return self._transforms_dict[name]
+
+    def __getitem__(self, key: str | int) -> BaseTransform:
+        """Access transform by name (str) or index (int).
+
+        Args:
+            key: Transform name or index
+
+        Returns:
+            The transform instance
+        """
+        if isinstance(key, int):
+            return self._transforms_list[key]
+        return self._transforms_dict[key]
+
+    def __iter__(self):
+        """Iterate over transforms in order."""
+        return iter(self._transforms_list)
+
+    def __len__(self):
+        """Return number of transforms."""
+        return len(self._transforms_list)
+
+    @property
+    def names(self) -> list[str]:
+        """Get list of transform names in order."""
+        return self._names_list
+
+    @property
+    def transforms(self) -> list[BaseTransform]:
+        """Get list of transforms (for backward compatibility)."""
+        return self._transforms_list
 
 
 @dataclass
 class Impute(BaseTransform):
+    name = "Impute"
+
     method: str
     fill_value: Any | None = None
 
@@ -99,6 +196,8 @@ class Impute(BaseTransform):
 
 @dataclass
 class Scale(BaseTransform):
+    name = "Scale"
+
     method: str
 
     # Fitted attributes
@@ -158,6 +257,8 @@ class Scale(BaseTransform):
 
 @dataclass
 class Discretize(BaseTransform):
+    name = "Discretize"
+
     method: str
     n_bins: int
     # Supervised params
@@ -237,6 +338,8 @@ class Discretize(BaseTransform):
 
 @dataclass
 class Encode(BaseTransform):
+    name = "Encode"
+
     method: str
     fill_val_name: str | None = None
 
@@ -320,6 +423,8 @@ class Encode(BaseTransform):
 
 @dataclass
 class ConvertDatetime(BaseTransform):
+    name = "ConvertDatetime"
+
     method: str
 
     # Fitted attributes

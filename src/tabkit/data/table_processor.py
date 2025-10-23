@@ -20,7 +20,7 @@ from .data_config import (
     get_default_label_pipeline_clf,
     get_default_label_pipeline_reg,
 )
-from .transforms import TRANSFORM_MAP, BaseTransform
+from .transforms import TRANSFORM_MAP, BaseTransform, Pipeline
 from .utils import load_from_disk, load_openml_dataset, load_uci_dataset
 
 
@@ -190,8 +190,8 @@ class TableProcessor:
         self.logger = setup_logger("TableProcessor", silent=not verbose)
         self.verbose = verbose
 
-    def _instantiate_pipeline(self, config_list) -> list[BaseTransform]:
-        pipeline = []
+    def _instantiate_pipeline(self, config_list) -> Pipeline:
+        pipeline = Pipeline()
         for step_config in config_list:
             class_name = step_config["class"]
             params = step_config.get("params", {})
@@ -200,7 +200,8 @@ class TableProcessor:
                     f"Unknown transform class: '{class_name}'. "
                     "Did you forget to register it with register_transform()?"
                 )
-            pipeline.append(TRANSFORM_MAP[class_name](**params))
+            transform = TRANSFORM_MAP[class_name](**params)
+            pipeline.add(transform)
         return pipeline
 
     @property
