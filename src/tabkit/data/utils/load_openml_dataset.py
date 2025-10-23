@@ -22,16 +22,6 @@ def _ensure_openml_configured():
             )
         openml.config.apikey = openml_api_key
 
-    if not openml.config.cache_directory:
-        openml_cache_dir = os.environ.get("OPENML_CACHE_DIR")
-        if openml_cache_dir is None:
-            raise ValueError(
-                "OPENML_CACHE_DIR not found in environment variables. "
-                "This is required to use OpenML datasets. "
-                "Set the environment variable or use a different data source."
-            )
-        openml.config.set_root_cache_directory(openml_cache_dir)
-
 
 def load_openml_dataset(
     task_id: int | None = None,
