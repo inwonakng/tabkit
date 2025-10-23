@@ -1,6 +1,6 @@
 [project]
 name = "table-toolkit"
-version = "2025.10.15.post2"
+version = "2025.10.22"
 description = "A Python library for consistent preprocessing of tabular data with automatic type inference, caching, and stratified splitting"
 readme = "README.md"
 requires-python = ">= 3.10"

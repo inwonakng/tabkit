@@ -133,16 +133,19 @@ Tabkit supports two distinct approaches for splitting your data into train/valid
 ### Mode 1: Ratio-Based Splitting (Quick & Simple)
 
 **When to use:**
+
 - You want a simple percentage-based split (e.g., 70/15/15)
 - You're doing quick prototyping or one-off experiments
 - You don't need full dataset coverage
 
 **How it works:**
+
 - Performs a single random stratified split based on specified ratios
 - Fast and intuitive
 - Different random seeds give different splits, but no systematic coverage
 
 **Example:**
+
 ```python
 from tabkit import TableProcessorConfig
 
@@ -156,17 +159,20 @@ config = TableProcessorConfig(
 ### Mode 2: K-Fold Based Splitting (Robust & Reproducible)
 
 **When to use:**
+
 - You need robust cross-validation
 - You want to ensure every sample appears in the test set across multiple runs
 - You're benchmarking models or doing comprehensive evaluation
 
 **How it works:**
+
 - Uses K-fold cross-validation for systematic data splitting
 - By varying `fold_idx` from 0 to `n_splits-1`, every sample appears in the test set exactly once
 - Provides systematic coverage of your entire dataset
 - Default: 10 splits = 10% test, then 9 sub-splits on training portion = ~11% val, ~79% train
 
 **Example:**
+
 ```python
 from tabkit import TableProcessorConfig
 
