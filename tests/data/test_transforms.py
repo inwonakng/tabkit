@@ -149,8 +149,10 @@ class TestConvertDatetime:
         transformed_df = transformer.fit_transform(sample_df.copy(), metadata=sample_metadata)
         assert 'datetime' not in transformed_df.columns
         assert 'datetime_year' in transformed_df.columns
+        assert 'datetime_weekday' in transformed_df.columns
         assert transformed_df['datetime_year'].iloc[0] == 2023
         assert transformed_df['datetime_month'].iloc[0] == 1
+        assert transformed_df['datetime_weekday'].iloc[0] == 6  # 2023-01-01 is Sunday (6)
 
     def test_convert_datetime_ignore(self, sample_df, sample_metadata):
         transformer = ConvertDatetime(method='ignore')
@@ -165,3 +167,208 @@ class TestConvertDatetime:
         transformed_df = transformer.fit_transform(df, metadata=dt_metadata)
         # pd.to_numeric on a NaT gives a large negative number
         assert transformed_df['datetime'].iloc[1] < 0
+
+
+class TestInverseTransforms:
+    """Test inverse transform functionality for all transform classes."""
+
+    def test_impute_inverse(self, sample_df):
+        """Impute inverse_transform should return unchanged data."""
+        imputer = Impute(method='mean')
+        transformed = imputer.fit_transform(sample_df.copy())
+        inverse = imputer.inverse_transform(transformed)
+        pd.testing.assert_frame_equal(transformed, inverse)
+
+    def test_scale_inverse_standard(self, sample_df, sample_metadata):
+        """Scale inverse should recover original values for standard scaling."""
+        df = sample_df.dropna(subset=['numeric'])
+        scaler = Scale(method='standard')
+        scaler.fit(df, metadata=sample_metadata)
+
+        transformed = scaler.transform(df.copy())
+        inverse = scaler.inverse_transform(transformed)
+
+        # Check that we recover the original numeric column
+        pd.testing.assert_series_equal(df['numeric'], inverse['numeric'], check_exact=False, atol=1e-10)
+
+    def test_scale_inverse_minmax(self, sample_df, sample_metadata):
+        """Scale inverse should recover original values for minmax scaling."""
+        df = sample_df.dropna(subset=['numeric'])
+        scaler = Scale(method='minmax')
+        scaler.fit(df, metadata=sample_metadata)
+
+        transformed = scaler.transform(df.copy())
+        inverse = scaler.inverse_transform(transformed)
+
+        # Check that we recover the original numeric column
+        pd.testing.assert_series_equal(df['numeric'], inverse['numeric'], check_exact=False, atol=1e-10)
+
+    def test_discretize_inverse(self, sample_df, sample_metadata):
+        """Discretize inverse should map bins to midpoints."""
+        discretizer = Discretize(method='uniform', n_bins=3)
+        df_no_nan = sample_df.dropna(subset=['numeric'])
+        discretizer.fit(df_no_nan, metadata=sample_metadata)
+
+        transformed = discretizer.transform(df_no_nan.copy())
+        inverse = discretizer.inverse_transform(transformed)
+
+        # Should have continuous values again (midpoints of bins)
+        assert inverse['numeric'].dtype == np.float64
+        # Values should be within original range
+        assert inverse['numeric'].min() >= df_no_nan['numeric'].min()
+        assert inverse['numeric'].max() <= df_no_nan['numeric'].max()
+        # Categorical columns should be unchanged
+        pd.testing.assert_series_equal(df_no_nan['categorical'], inverse['categorical'])
+
+    def test_encode_inverse_constant(self):
+        """Encode inverse should recover original categorical values."""
+        train_df = pd.DataFrame({'cat': ['A', 'B', 'A', 'C']})
+        test_df = pd.DataFrame({'cat': ['A', 'B', 'D']})  # 'D' is unseen
+        train_metadata = [ColumnMetadata.from_series(train_df['cat'])]
+
+        encoder = Encode(method='constant', fill_val_name='unseen')
+        encoder.fit(train_df, metadata=train_metadata)
+
+        transformed = encoder.transform(test_df)
+        inverse = encoder.inverse_transform(transformed)
+
+        # Check that A, B are recovered correctly
+        assert inverse['cat'].iloc[0] == 'A'
+        assert inverse['cat'].iloc[1] == 'B'
+        # Unseen value should map to 'unseen'
+        assert inverse['cat'].iloc[2] == 'unseen'
+
+    def test_encode_inverse_most_frequent(self):
+        """Encode inverse with most_frequent should map codes back to categories."""
+        train_df = pd.DataFrame({'cat': ['A', 'A', 'B', 'C']})
+        train_metadata = [ColumnMetadata.from_series(train_df['cat'])]
+
+        encoder = Encode(method='most_frequent')
+        encoder.fit(train_df, metadata=train_metadata)
+
+        transformed = encoder.transform(train_df)
+        inverse = encoder.inverse_transform(transformed)
+
+        pd.testing.assert_series_equal(train_df['cat'], inverse['cat'], check_names=False)
+
+    def test_datetime_inverse_to_timestamp(self, sample_df, sample_metadata):
+        """ConvertDatetime inverse should reconstruct datetime from timestamps."""
+        df = sample_df.dropna(subset=['datetime'])
+        transformer = ConvertDatetime(method='to_timestamp')
+        transformer.fit(df, metadata=sample_metadata)
+
+        transformed = transformer.transform(df.copy())
+        inverse = transformer.inverse_transform(transformed)
+
+        # Check datetime column is reconstructed
+        assert pd.api.types.is_datetime64_any_dtype(inverse['datetime'])
+        # Values should match (within second precision since we use integer seconds)
+        pd.testing.assert_series_equal(
+            df['datetime'].dt.floor('s'),
+            inverse['datetime'].dt.floor('s'),
+            check_names=False
+        )
+
+    def test_datetime_inverse_decompose(self, sample_df, sample_metadata):
+        """ConvertDatetime inverse should reconstruct datetime from components."""
+        df = sample_df.dropna(subset=['datetime'])
+        transformer = ConvertDatetime(method='decompose')
+        transformer.fit(df, metadata=sample_metadata)
+
+        transformed = transformer.transform(df.copy())
+        inverse = transformer.inverse_transform(transformed)
+
+        # Check datetime column is reconstructed
+        assert 'datetime' in inverse.columns
+        assert pd.api.types.is_datetime64_any_dtype(inverse['datetime'])
+        # Decomposed columns should be removed
+        assert 'datetime_year' not in inverse.columns
+        assert 'datetime_month' not in inverse.columns
+        assert 'datetime_weekday' not in inverse.columns
+        # Values should match (within second precision)
+        pd.testing.assert_series_equal(
+            df['datetime'].dt.floor('s'),
+            inverse['datetime'].dt.floor('s'),
+            check_names=False
+        )
+
+    def test_datetime_inverse_decompose_multiple_columns(self):
+        """ConvertDatetime inverse should handle multiple datetime columns correctly."""
+        # Create a dataframe with two datetime columns
+        df = pd.DataFrame({
+            'datetime1': pd.to_datetime(['2023-01-01', '2023-01-02', '2023-01-03']),
+            'datetime2': pd.to_datetime(['2024-06-15', '2024-06-16', '2024-06-17']),
+            'numeric': [1.0, 2.0, 3.0]
+        })
+
+        # Create metadata
+        metadata = [
+            ColumnMetadata(name='datetime1', kind='datetime', dtype='datetime64[ns]'),
+            ColumnMetadata(name='datetime2', kind='datetime', dtype='datetime64[ns]'),
+            ColumnMetadata(name='numeric', kind='continuous', dtype='float64')
+        ]
+
+        transformer = ConvertDatetime(method='decompose')
+        transformer.fit(df, metadata=metadata)
+
+        transformed = transformer.transform(df.copy())
+
+        # Verify both datetime columns were decomposed
+        assert 'datetime1_year' in transformed.columns
+        assert 'datetime2_year' in transformed.columns
+        assert 'datetime1_weekday' in transformed.columns
+        assert 'datetime2_weekday' in transformed.columns
+        assert 'datetime1' not in transformed.columns
+        assert 'datetime2' not in transformed.columns
+
+        # Test inverse transform - this is where the bug occurred
+        inverse = transformer.inverse_transform(transformed)
+
+        # Check both datetime columns are reconstructed
+        assert 'datetime1' in inverse.columns
+        assert 'datetime2' in inverse.columns
+        assert pd.api.types.is_datetime64_any_dtype(inverse['datetime1'])
+        assert pd.api.types.is_datetime64_any_dtype(inverse['datetime2'])
+
+        # All decomposed columns should be removed
+        assert 'datetime1_year' not in inverse.columns
+        assert 'datetime1_month' not in inverse.columns
+        assert 'datetime1_weekday' not in inverse.columns
+        assert 'datetime2_year' not in inverse.columns
+        assert 'datetime2_month' not in inverse.columns
+        assert 'datetime2_weekday' not in inverse.columns
+
+        # Values should match (within second precision)
+        pd.testing.assert_series_equal(
+            df['datetime1'].dt.floor('s'),
+            inverse['datetime1'].dt.floor('s'),
+            check_names=False
+        )
+        pd.testing.assert_series_equal(
+            df['datetime2'].dt.floor('s'),
+            inverse['datetime2'].dt.floor('s'),
+            check_names=False
+        )
+
+    def test_round_trip_pipeline(self, sample_df, sample_metadata):
+        """Test that a full pipeline can be reversed."""
+        # Create a simple pipeline: Scale -> Discretize
+        df = sample_df.dropna()
+
+        # Apply scaling
+        scaler = Scale(method='minmax')
+        scaler.fit(df, metadata=sample_metadata)
+        scaled = scaler.transform(df.copy())
+
+        # Apply discretization
+        discretizer = Discretize(method='uniform', n_bins=5)
+        discretizer.fit(scaled, metadata=sample_metadata)
+        discretized = discretizer.transform(scaled.copy())
+
+        # Reverse the pipeline
+        inverse_discretized = discretizer.inverse_transform(discretized)
+        inverse_scaled = scaler.inverse_transform(inverse_discretized)
+
+        # Should approximately recover original (discretization loses info)
+        assert inverse_scaled['numeric'].min() >= df['numeric'].min()
+        assert inverse_scaled['numeric'].max() <= df['numeric'].max()

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import numpy as np
@@ -27,6 +27,10 @@ class BaseTransform(ABC):
         """Apply the fitted transform."""
         raise NotImplementedError
 
+    def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Reverse the fitted transform. Default implementation returns X unchanged."""
+        return X
+
     def update_metadata(
         self, X_new: pd.DataFrame, metadata: list[ColumnMetadata], **kwargs
     ) -> list[ColumnMetadata]:
@@ -45,6 +49,9 @@ class BaseTransform(ABC):
 class Impute(BaseTransform):
     method: str
     fill_value: Any | None = None
+
+    # Fitted attributes
+    imputation_values_: dict[str, Any] = field(default_factory=dict, init=False)
 
     def fit(
         self,
@@ -85,10 +92,19 @@ class Impute(BaseTransform):
             X_new[c] = X_new[c].fillna(self.imputation_values_.get(c))
         return X_new
 
+    def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Inverse transform for Impute - returns unchanged as we can't recover original NaN locations."""
+        return X
+
 
 @dataclass
 class Scale(BaseTransform):
     method: str
+
+    # Fitted attributes
+    scalers_: dict[str, Any] = field(default_factory=dict, init=False)
+    cont_cols_: list[str] = field(default_factory=list, init=False)
+    scaler_: Any = field(default=None, init=False)
 
     def fit(
         self,
@@ -130,6 +146,15 @@ class Scale(BaseTransform):
         X_new[self.cont_cols_] = self.scaler_.transform(X[self.cont_cols_])
         return X_new
 
+    def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Inverse scale transformation to recover original continuous values."""
+        if not self.cont_cols_:
+            return X
+
+        X_new = X.copy()
+        X_new[self.cont_cols_] = self.scaler_.inverse_transform(X[self.cont_cols_])
+        return X_new
+
 
 @dataclass
 class Discretize(BaseTransform):
@@ -137,6 +162,9 @@ class Discretize(BaseTransform):
     n_bins: int
     # Supervised params
     is_task_regression: bool = False
+
+    # Fitted attributes
+    bins_: dict[str, np.ndarray] = field(default_factory=dict, init=False)
 
     def fit(
         self,
@@ -175,6 +203,19 @@ class Discretize(BaseTransform):
             )
         return X_new
 
+    def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Inverse discretization by mapping bin indices to bin midpoints."""
+        X_new = X.copy()
+        for c in X.columns:
+            if c not in self.bins_:
+                continue
+            bins = self.bins_[c]
+            # Map each bin index to its midpoint, handling NaN values in bins
+            with np.errstate(invalid='ignore'):
+                bin_midpoints = np.array([(bins[i] + bins[i + 1]) / 2 for i in range(len(bins) - 1)])
+            X_new[c] = bin_midpoints[X_new[c].astype(int)]
+        return X_new
+
     def update_metadata(
         self,
         X_new: pd.DataFrame,
@@ -198,6 +239,9 @@ class Discretize(BaseTransform):
 class Encode(BaseTransform):
     method: str
     fill_val_name: str | None = None
+
+    # Fitted attributes - stores (mapping, fill_unseen_val) for each column
+    encodings_: dict[str, tuple[dict[Any, int], int]] = field(default_factory=dict, init=False)
 
     def fit(
         self,
@@ -237,6 +281,21 @@ class Encode(BaseTransform):
             X_new[col] = X_new[col].map(mapping).fillna(fill_unseen_val).astype(int)
         return X_new
 
+    def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Inverse encoding by mapping integer codes back to original values."""
+        X_new = X.copy()
+        for col in X.columns:
+            if col not in self.encodings_:
+                continue
+            mapping, fill_unseen_val = self.encodings_[col]
+            # Create reverse mapping: int -> original value
+            reverse_mapping = {v: k for k, v in mapping.items()}
+            # Handle the fill value if constant method was used
+            if self.method == "constant" and self.fill_val_name is not None:
+                reverse_mapping[fill_unseen_val] = self.fill_val_name
+            X_new[col] = X_new[col].astype(int).map(reverse_mapping)
+        return X_new
+
     def update_metadata(
         self,
         X_new: pd.DataFrame,
@@ -262,6 +321,12 @@ class Encode(BaseTransform):
 @dataclass
 class ConvertDatetime(BaseTransform):
     method: str
+
+    # Fitted attributes
+    _datetime_columns: list[str] = field(default_factory=list, init=False)
+    _original_columns: list[str] = field(default_factory=list, init=False)
+    _removed_columns: list[str] = field(default_factory=list, init=False)
+    _added_columns: list[str] = field(default_factory=list, init=False)
 
     def fit(
         self,
@@ -304,6 +369,7 @@ class ConvertDatetime(BaseTransform):
                 X_new[c + "_hour"] = X_new[c].dt.hour
                 X_new[c + "_minute"] = X_new[c].dt.minute
                 X_new[c + "_second"] = X_new[c].dt.second
+                X_new[c + "_weekday"] = X_new[c].dt.weekday
                 self._added_columns += [
                     c + "_year",
                     c + "_month",
@@ -311,9 +377,40 @@ class ConvertDatetime(BaseTransform):
                     c + "_hour",
                     c + "_minute",
                     c + "_second",
+                    c + "_weekday",
                 ]
                 X_new = X_new.drop(columns=[c])
                 self._removed_columns.append(c)
+        return X_new
+
+    def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Inverse datetime conversion - reconstructs datetime columns from transformed data."""
+        X_new = X.copy()
+
+        for c in self._datetime_columns:
+            if self.method == "to_timestamp":
+                # Convert timestamp back to datetime
+                X_new[c] = pd.to_datetime(X_new[c], unit='s')
+            elif self.method == "decompose":
+                # Reconstruct datetime from decomposed components
+                X_new[c] = pd.to_datetime({
+                    'year': X_new[c + '_year'],
+                    'month': X_new[c + '_month'],
+                    'day': X_new[c + '_day'],
+                    'hour': X_new[c + '_hour'],
+                    'minute': X_new[c + '_minute'],
+                    'second': X_new[c + '_second']
+                })
+                # Drop the decomposed columns for this datetime column only
+                columns_to_drop = [
+                    c + '_year', c + '_month', c + '_day',
+                    c + '_hour', c + '_minute', c + '_second', c + '_weekday'
+                ]
+                X_new = X_new.drop(columns=columns_to_drop)
+            elif self.method == "ignore":
+                # Cannot reconstruct ignored columns - they are lost
+                pass
+
         return X_new
 
     def update_metadata(

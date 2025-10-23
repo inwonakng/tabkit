@@ -40,9 +40,9 @@ def _parse_config(obj: Any, dataclass_type: type, config_name: str) -> Any:
     """
     from dataclasses import is_dataclass
 
-    # Case 1: Already the correct dataclass type
+    # Case 1: Already the correct dataclass type, we should copy it and return the copy
     if isinstance(obj, dataclass_type):
-        return obj
+        return dataclass_type(**asdict(obj))
 
     # Case 2: Dictionary - convert directly
     if isinstance(obj, dict):
@@ -54,11 +54,10 @@ def _parse_config(obj: Any, dataclass_type: type, config_name: str) -> Any:
         if is_dataclass(obj):
             obj_dict = asdict(obj)
         # Try __dict__ for regular objects
-        elif hasattr(obj, '__dict__'):
+        elif hasattr(obj, "__dict__"):
             obj_dict = obj.__dict__
         else:
             raise TypeError(f"Cannot convert {type(obj)} to dict")
-
         return dataclass_type(**obj_dict)
     except Exception as e:
         raise TypeError(
@@ -175,13 +174,9 @@ class TableProcessor:
         # Default stratification pipeline for classification if not provided
         if self.config.label_stratify_pipeline is None:
             if self.config.task_kind == "classification":
-                self.config.label_stratify_pipeline = (
-                    get_default_label_pipeline_clf()
-                )
+                self.config.label_stratify_pipeline = get_default_label_pipeline_clf()
             else:
-                self.config.label_stratify_pipeline = (
-                    get_default_label_pipeline_reg()
-                )
+                self.config.label_stratify_pipeline = get_default_label_pipeline_reg()
 
         # Extract dataset name
         self.dataset_name = self.dataset_config.dataset_name
@@ -267,9 +262,7 @@ class TableProcessor:
                 shuffle=True,
                 random_state=random_state,
             )
-            tr_idxs, te_idxs = list(splitter.split(X, stratify_target))[
-                fold_idx
-            ]
+            tr_idxs, te_idxs = list(splitter.split(X, stratify_target))[fold_idx]
         else:
             splitter = KFold(
                 n_splits=n_splits,
@@ -586,9 +579,7 @@ class TableProcessor:
                 split_file_path=self.dataset_config.split_file_path,
             )
         else:
-            raise ValueError(
-                f"Unknown data source {self.dataset_config.data_source}"
-            )
+            raise ValueError(f"Unknown data source {self.dataset_config.data_source}")
         return X, y, tr_idxs, te_idxs
 
     def _filter_labels(
@@ -649,10 +640,7 @@ class TableProcessor:
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
         X, y, tr_idxs, te_idxs = self._load_data()
-        if (
-            self.config.exclude_labels
-            and self.config.task_kind == "classification"
-        ):
+        if self.config.exclude_labels and self.config.task_kind == "classification":
             X, y = self._filter_labels(X, y, self.config.exclude_labels)
             self.logger.info("filtered by `exclude_labels`")
         if self.config.exclude_columns:
