@@ -36,6 +36,12 @@ def get_default_pipeline_conf() -> list[dict]:
 def get_default_label_pipeline_clf() -> list[dict]:
     return [
         {
+            "class": "Impute",
+            "params": {
+                "method": "most_frequent",
+            },
+        },
+        {
             "class": "Encode",
             "params": {"method": "most_frequent"},
         },
@@ -48,6 +54,12 @@ def get_default_label_pipeline_clf() -> list[dict]:
 
 def get_default_label_pipeline_reg() -> list[dict]:
     return [
+        {
+            "class": "Impute",
+            "params": {
+                "method": "most_frequent",
+            },
+        },
         {
             "class": "Encode",
             "params": {"method": "most_frequent"},
